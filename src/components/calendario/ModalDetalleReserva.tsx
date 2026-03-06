@@ -56,7 +56,7 @@ export function ModalDetalleReserva({
 
   const horasAnticipacion = diferenciaEnHoras(new Date(reserva.fecha_inicio), new Date())
   const generaraCredito = horasAnticipacion >= CANCELACION_MIN_HORAS
-  const puedeCancel ar = reserva.estado === ESTADO_RESERVA.CONFIRMADA
+  const puedeCancelar = reserva.estado === ESTADO_RESERVA.CONFIRMADA
 
   const handleCancelar = async () => {
     setLoading(true)
@@ -181,7 +181,7 @@ export function ModalDetalleReserva({
             )}
 
             {/* Alerta de cancelación */}
-            {puedeCancel ar && (
+            {puedeCancelar && (
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
@@ -206,7 +206,7 @@ export function ModalDetalleReserva({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cerrar
               </Button>
-              {puedeCancel ar && (
+              {puedeCancelar && (
                 <Button
                   variant="destructive"
                   onClick={() => setShowCancelForm(true)}

@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { crearAlumno, actualizarAlumno, obtenerUsuariosDisponiblesParaAlumnos } from '@/lib/actions/alumnos.actions'
 import { alumnoSchema, type AlumnoInput } from '@/lib/validations/alumno.schema'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -110,6 +110,11 @@ export function FormAlumno({
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Editar Alumno' : 'Nuevo Alumno'}</DialogTitle>
+          <DialogDescription>
+            {isEdit
+              ? 'Modifica la información del alumno y guarda los cambios.'
+              : 'Completa los datos para registrar un nuevo alumno en la sede.'}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

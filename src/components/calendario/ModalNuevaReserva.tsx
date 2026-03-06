@@ -8,7 +8,7 @@ import { crearReserva } from '@/lib/actions/reservas.actions'
 import { obtenerCreditosAlumno } from '@/lib/actions/alumnos.actions'
 import { reservaSchema, type ReservaInput } from '@/lib/validations/reserva.schema'
 import { TIPO_RESERVA } from '@/lib/constants/estados'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -128,6 +128,9 @@ export function ModalNuevaReserva({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Nueva Reserva</DialogTitle>
+          <DialogDescription>
+            Configura los datos de la reserva para el horario seleccionado.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

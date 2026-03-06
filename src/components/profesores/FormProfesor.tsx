@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { crearProfesor, actualizarProfesor, obtenerUsuariosDisponibles } from '@/lib/actions/profesores.actions'
 import { profesorSchema, type ProfesorInput } from '@/lib/validations/profesor.schema'
 import { TIPO_AUTORIZACION_PROFESOR, TIPO_AUTORIZACION_PROFESOR_LABELS } from '@/lib/constants/estados'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -113,6 +113,11 @@ export function FormProfesor({
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Editar Profesor' : 'Nuevo Profesor'}</DialogTitle>
+          <DialogDescription>
+            {isEdit
+              ? 'Actualiza la configuración y permisos del profesor.'
+              : 'Completa los datos para registrar un nuevo profesor en la sede.'}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

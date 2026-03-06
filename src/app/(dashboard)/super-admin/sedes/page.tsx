@@ -8,6 +8,23 @@ export default async function SedesPage() {
     obtenerOrganizaciones(),
   ])
 
+  if (sedesResult.error || orgsResult.error) {
+    return (
+      <div className="space-y-2">
+        {sedesResult.error && (
+          <div className="rounded-md border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+            Error al cargar sedes: {sedesResult.error}
+          </div>
+        )}
+        {orgsResult.error && (
+          <div className="rounded-md border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+            Error al cargar organizaciones: {orgsResult.error}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const sedes = sedesResult.data || []
   const organizaciones = orgsResult.data || []
 

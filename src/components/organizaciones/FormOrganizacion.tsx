@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useRouter } from 'next/navigation'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { organizacionSchema, type OrganizacionInput } from '@/lib/validations/organizacion.schema'
 import { crearOrganizacion, actualizarOrganizacion } from '@/lib/actions/organizaciones.actions'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,9 +21,10 @@ interface FormOrganizacionProps {
 
 export function FormOrganizacion({ open, onClose, organizacion }: FormOrganizacionProps) {
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
   const isEdit = !!organizacion
 
-  const { register, handleSubmit, formState: { errors } } = useForm<OrganizacionInput>({
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<OrganizacionInput>({
     resolver: zodResolver(organizacionSchema),
     defaultValues: organizacion || {
       nombre: '',
@@ -31,6 +33,19 @@ export function FormOrganizacion({ open, onClose, organizacion }: FormOrganizaci
       activa: true,
     },
   })
+
+  useEffect(() => {
+    if (!open) return
+
+    reset(
+      organizacion || {
+        nombre: '',
+        descripcion: '',
+        logo_url: '',
+        activa: true,
+      }
+    )
+  }, [open, organizacion, reset])
 
   const onSubmit = async (data: OrganizacionInput) => {
     setLoading(true)
@@ -43,6 +58,7 @@ export function FormOrganizacion({ open, onClose, organizacion }: FormOrganizaci
         toast.error(result.error)
       } else {
         toast.success(isEdit ? 'Organización actualizada' : 'Organización creada')
+        router.refresh()
         onClose()
       }
     } catch (error) {
@@ -57,6 +73,11 @@ export function FormOrganizacion({ open, onClose, organizacion }: FormOrganizaci
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Editar' : 'Nueva'} Organización</DialogTitle>
+          <DialogDescription>
+            {isEdit
+              ? 'Actualiza los datos de la organización.'
+              : 'Completa los campos para crear una nueva organización.'}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

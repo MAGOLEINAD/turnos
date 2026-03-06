@@ -145,11 +145,11 @@ export function tieneOcurrenciaEnFecha(
  */
 export function proximaOcurrenciaHorarioFijo(
   horarioFijo: HorarioFijo,
-  desdeF echa?: Date
+  desdeFecha?: Date
 ): OcurrenciaHorarioFijo | null {
   if (!horarioFijo.activo) return null
 
-  const desde = parseDate(desdeF echa || new Date())
+  const desde = parseDate(desdeFecha || new Date())
   const vigenciaInicio = parseDate(horarioFijo.fecha_inicio_vigencia)
 
   // Empezar desde la fecha mayor (desde o vigencia)

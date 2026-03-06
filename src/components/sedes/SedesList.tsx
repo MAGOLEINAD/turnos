@@ -1,11 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, MapPin, Phone, Mail } from 'lucide-react'
+import { Plus, MapPin, Phone, Mail, Trash2 } from 'lucide-react'
 import { FormSede } from './FormSede'
+import { eliminarSede } from '@/lib/actions/sedes.actions'
+import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface SedesListProps {
   sedesIniciales: any[]
@@ -13,11 +17,35 @@ interface SedesListProps {
 }
 
 export function SedesList({ sedesIniciales, organizaciones }: SedesListProps) {
+  const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [sedeAEliminar, setSedeAEliminar] = useState<any | null>(null)
+
+  const confirmarEliminacion = async () => {
+    if (!sedeAEliminar) return
+
+    setDeletingId(sedeAEliminar.id)
+    try {
+      const result = await eliminarSede(sedeAEliminar.id)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success('Sede eliminada')
+      setSedeAEliminar(null)
+      router.refresh()
+    } catch (error) {
+      toast.error('Error al eliminar sede')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="text-3xl font-bold">Sedes</h1>
         <Button onClick={() => setModalOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
@@ -29,13 +57,23 @@ export function SedesList({ sedesIniciales, organizaciones }: SedesListProps) {
         {sedesIniciales.map((sede) => (
           <Card key={sede.id}>
             <CardHeader>
-              <div className="flex justify-between items-start">
+              <div className="flex items-start justify-between">
                 <div>
                   <CardTitle>{sede.nombre}</CardTitle>
                   <Badge variant="outline" className="mt-2">
                     {sede.organizaciones?.nombre}
                   </Badge>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setSedeAEliminar(sede)}
+                  disabled={deletingId === sede.id}
+                  aria-label={`Eliminar ${sede.nombre}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -62,10 +100,23 @@ export function SedesList({ sedesIniciales, organizaciones }: SedesListProps) {
         ))}
       </div>
 
-      <FormSede
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        organizaciones={organizaciones}
+      <FormSede open={modalOpen} onClose={() => setModalOpen(false)} organizaciones={organizaciones} />
+
+      <ConfirmDialog
+        open={!!sedeAEliminar}
+        onOpenChange={(open) => {
+          if (!open) setSedeAEliminar(null)
+        }}
+        title="Eliminar sede"
+        description={
+          sedeAEliminar
+            ? `Se eliminara "${sedeAEliminar.nombre}" de forma permanente. Esta accion no se puede deshacer.`
+            : 'Esta accion no se puede deshacer.'
+        }
+        confirmText="Eliminar"
+        confirmVariant="destructive"
+        loading={!!sedeAEliminar && deletingId === sedeAEliminar.id}
+        onConfirm={confirmarEliminacion}
       />
     </div>
   )

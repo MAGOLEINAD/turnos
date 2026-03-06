@@ -1,27 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { sedeSchema, type SedeInput } from '@/lib/validations/sede.schema'
-import { crearSede } from '@/lib/actions/sedes.actions'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { actualizarSede, crearSede } from '@/lib/actions/sedes.actions'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 
 interface FormSedeProps {
   open: boolean
   onClose: () => void
   organizaciones: any[]
+  sede?: any
 }
 
-export function FormSede({ open, onClose, organizaciones }: FormSedeProps) {
+export function FormSede({ open, onClose, organizaciones, sede }: FormSedeProps) {
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
+  const isEdit = !!sede
 
-  const { register, handleSubmit, formState: { errors } } = useForm<SedeInput>({
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<SedeInput>({
     resolver: zodResolver(sedeSchema),
     defaultValues: {
       organizacion_id: organizaciones[0]?.id || '',
@@ -34,19 +37,38 @@ export function FormSede({ open, onClose, organizaciones }: FormSedeProps) {
     },
   })
 
+  useEffect(() => {
+    if (!open) return
+
+    reset(
+      sede || {
+        organizacion_id: organizaciones[0]?.id || '',
+        nombre: '',
+        slug: '',
+        direccion: '',
+        telefono: '',
+        email: '',
+        activa: true,
+      }
+    )
+  }, [open, sede, organizaciones, reset])
+
   const onSubmit = async (data: SedeInput) => {
     setLoading(true)
     try {
-      const result = await crearSede(data)
+      const result = isEdit
+        ? await actualizarSede(sede.id, data)
+        : await crearSede(data)
 
       if (result.error) {
         toast.error(result.error)
       } else {
-        toast.success('Sede creada exitosamente')
+        toast.success(isEdit ? 'Sede actualizada exitosamente' : 'Sede creada exitosamente')
+        router.refresh()
         onClose()
       }
     } catch (error) {
-      toast.error('Error al crear sede')
+      toast.error(isEdit ? 'Error al actualizar sede' : 'Error al crear sede')
     } finally {
       setLoading(false)
     }
@@ -56,7 +78,12 @@ export function FormSede({ open, onClose, organizaciones }: FormSedeProps) {
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Nueva Sede</DialogTitle>
+          <DialogTitle>{isEdit ? 'Editar Sede' : 'Nueva Sede'}</DialogTitle>
+          <DialogDescription>
+            {isEdit
+              ? 'Modifica los datos de la sede y guarda los cambios.'
+              : 'Completa los datos para crear una nueva sede.'}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -113,7 +140,7 @@ export function FormSede({ open, onClose, organizaciones }: FormSedeProps) {
               Cancelar
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Creando...' : 'Crear Sede'}
+              {loading ? 'Guardando...' : isEdit ? 'Actualizar Sede' : 'Crear Sede'}
             </Button>
           </div>
         </form>
