@@ -4,10 +4,11 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
+import { useSearchParams } from 'next/navigation'
 import { loginSchema, type LoginInput } from '@/lib/validations/auth.schema'
 import { login, loginWithGoogle } from '@/lib/actions/auth.actions'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ import { Label } from '@/components/ui/label'
 
 export function LoginForm() {
   const [loading, setLoading] = useState(false)
+  const searchParams = useSearchParams()
 
   const {
     register,
@@ -25,15 +27,31 @@ export function LoginForm() {
     resolver: zodResolver(loginSchema),
   })
 
+  // Mostrar errores de sesión desde URL params
+  useEffect(() => {
+    const error = searchParams.get('error')
+    if (error === 'session_error') {
+      toast.error('Error al establecer la sesión. Por favor, intenta nuevamente.')
+    } else if (error === 'auth_error') {
+      toast.error('Error de autenticación. Por favor, verifica tus credenciales.')
+    }
+  }, [searchParams])
+
   const onSubmit = async (data: LoginInput) => {
     setLoading(true)
-    const result = await login(data)
+    try {
+      const result = await login(data)
 
-    if (result?.error) {
-      toast.error(result.error)
+      if (result?.error) {
+        toast.error(result.error)
+        setLoading(false)
+      }
+      // Si no hay error, el redirect se ejecutará automáticamente
+    } catch (error) {
+      console.error('[LoginForm] Error inesperado:', error)
+      toast.error('Error inesperado al iniciar sesión. Por favor, intenta nuevamente.')
       setLoading(false)
     }
-    // Si no hay error, el redirect se ejecutará automáticamente
   }
 
   const handleGoogleLogin = async () => {

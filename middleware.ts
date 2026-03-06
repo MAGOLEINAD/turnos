@@ -60,6 +60,12 @@ export async function middleware(request: NextRequest) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = '/login'
     redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
+
+    // Si venía de dashboard, probablemente hubo un error de sesión
+    if (request.nextUrl.pathname.startsWith('/dashboard')) {
+      redirectUrl.searchParams.set('error', 'session_error')
+    }
+
     return NextResponse.redirect(redirectUrl)
   }
 

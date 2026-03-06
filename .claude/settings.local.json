@@ -5,7 +5,10 @@
       "Bash(npx create-next-app:*)",
       "Bash(npm install:*)",
       "Bash(npx shadcn@latest add:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(tree:*)"
     ]
   }
 }

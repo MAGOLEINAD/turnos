@@ -96,37 +96,53 @@ export async function loginWithGoogle() {
 export async function getUser() {
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  try {
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
 
-  if (!user) {
-    console.log('[getUser] No hay usuario autenticado')
+    if (authError) {
+      console.error('[getUser] Error en auth.getUser():', authError)
+      return null
+    }
+
+    if (!user) {
+      console.log('[getUser] No hay usuario autenticado')
+      return null
+    }
+
+    console.log('[getUser] Usuario autenticado:', user.id, user.email)
+
+    // Obtener datos completos del usuario con rol y sede
+    const { data: usuario, error } = await supabase
+      .from('usuarios')
+      .select(`
+        *,
+        membresias (
+          rol,
+          sede_id,
+          organizacion_id,
+          activa
+        )
+      `)
+      .eq('id', user.id)
+      .single()
+
+    if (error) {
+      console.error('[getUser] Error al obtener usuario:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      })
+      return null
+    }
+
+    console.log('[getUser] Usuario completo:', JSON.stringify(usuario, null, 2))
+    return usuario
+  } catch (error) {
+    console.error('[getUser] Error inesperado:', error)
     return null
   }
-
-  console.log('[getUser] Usuario autenticado:', user.id, user.email)
-
-  // Obtener datos completos del usuario con rol y sede
-  const { data: usuario, error } = await supabase
-    .from('usuarios')
-    .select(`
-      *,
-      membresias (
-        rol,
-        sede_id,
-        organizacion_id,
-        activa
-      )
-    `)
-    .eq('id', user.id)
-    .single()
-
-  if (error) {
-    console.error('[getUser] Error al obtener usuario:', error)
-    return null
-  }
-
-  console.log('[getUser] Usuario completo:', JSON.stringify(usuario, null, 2))
-  return usuario
 }
