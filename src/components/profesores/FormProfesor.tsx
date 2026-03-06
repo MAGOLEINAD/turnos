@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
@@ -9,6 +9,7 @@ import { profesorSchema, type ProfesorInput } from '@/lib/validations/profesor.s
 import { TIPO_AUTORIZACION_PROFESOR, TIPO_AUTORIZACION_PROFESOR_LABELS } from '@/lib/constants/estados'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -62,13 +63,7 @@ export function FormProfesor({
         },
   })
 
-  useEffect(() => {
-    if (open && !isEdit) {
-      cargarUsuariosDisponibles()
-    }
-  }, [open, isEdit])
-
-  const cargarUsuariosDisponibles = async () => {
+  const cargarUsuariosDisponibles = useCallback(async () => {
     setLoadingUsuarios(true)
     try {
       const result = await obtenerUsuariosDisponibles(sedeId)
@@ -80,7 +75,13 @@ export function FormProfesor({
     } finally {
       setLoadingUsuarios(false)
     }
-  }
+  }, [sedeId])
+
+  useEffect(() => {
+    if (open && !isEdit) {
+      cargarUsuariosDisponibles()
+    }
+  }, [open, isEdit, cargarUsuariosDisponibles])
 
   const onSubmit = async (data: ProfesorInput) => {
     setLoading(true)
@@ -246,9 +247,14 @@ export function FormProfesor({
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading || (!isEdit && usuarios.length === 0)}>
-              {loading ? 'Guardando...' : isEdit ? 'Actualizar' : 'Crear Profesor'}
-            </Button>
+            <LoadingButton
+              type="submit"
+              loading={loading}
+              disabled={!isEdit && usuarios.length === 0}
+              loadingText={isEdit ? 'Actualizando profesor...' : 'Creando profesor...'}
+            >
+              {isEdit ? 'Actualizar' : 'Crear Profesor'}
+            </LoadingButton>
           </div>
         </form>
       </DialogContent>

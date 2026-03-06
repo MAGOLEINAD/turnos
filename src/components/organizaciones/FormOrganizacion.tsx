@@ -9,6 +9,7 @@ import { organizacionSchema, type OrganizacionInput } from '@/lib/validations/or
 import { crearOrganizacion, actualizarOrganizacion } from '@/lib/actions/organizaciones.actions'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -101,9 +102,13 @@ export function FormOrganizacion({ open, onClose, organizacion }: FormOrganizaci
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Guardando...' : isEdit ? 'Actualizar' : 'Crear'}
-            </Button>
+            <LoadingButton
+              type="submit"
+              loading={loading}
+              loadingText={isEdit ? 'Actualizando...' : 'Creando...'}
+            >
+              {isEdit ? 'Actualizar' : 'Crear'}
+            </LoadingButton>
           </div>
         </form>
       </DialogContent>

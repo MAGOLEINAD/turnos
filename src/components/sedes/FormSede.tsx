@@ -9,6 +9,7 @@ import { sedeSchema, type SedeInput } from '@/lib/validations/sede.schema'
 import { actualizarSede, crearSede } from '@/lib/actions/sedes.actions'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -139,9 +140,13 @@ export function FormSede({ open, onClose, organizaciones, sede }: FormSedeProps)
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Guardando...' : isEdit ? 'Actualizar Sede' : 'Crear Sede'}
-            </Button>
+            <LoadingButton
+              type="submit"
+              loading={loading}
+              loadingText={isEdit ? 'Actualizando sede...' : 'Creando sede...'}
+            >
+              {isEdit ? 'Actualizar Sede' : 'Crear Sede'}
+            </LoadingButton>
           </div>
         </form>
       </DialogContent>

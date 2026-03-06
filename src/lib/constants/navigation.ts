@@ -30,6 +30,10 @@ export const NAV_SUPER_ADMIN: NavItem[] = [
     title: 'Usuarios',
     href: '/super-admin/usuarios',
   },
+  {
+    title: 'Vista Global',
+    href: '/super-admin/vista-global',
+  },
 ]
 
 // Navegación para Admin

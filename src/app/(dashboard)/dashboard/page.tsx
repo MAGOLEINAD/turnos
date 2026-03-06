@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Dashboard principal - Redirige según rol
  */
 
@@ -22,9 +22,9 @@ export default async function DashboardPage() {
 
   // Usuario sin rol asignado
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold mb-4">Bienvenido</h1>
+    <div className="flex h-full justify-center pt-16">
+      <div className="max-w-2xl text-center">
+        <h1 className="mb-4 text-2xl font-bold">Bienvenido</h1>
         <p className="text-muted-foreground">
           Tu cuenta aún no tiene un rol asignado. Por favor, contacta al administrador.
         </p>

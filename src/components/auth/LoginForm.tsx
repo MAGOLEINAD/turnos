@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Formulario de login
  */
 
@@ -9,14 +9,16 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { useSearchParams } from 'next/navigation'
+import { Eye, EyeOff } from 'lucide-react'
 import { loginSchema, type LoginInput } from '@/lib/validations/auth.schema'
 import { login, loginWithGoogle } from '@/lib/actions/auth.actions'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { LoadingButton } from '@/components/ui/loading-button'
 
 export function LoginForm() {
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const searchParams = useSearchParams()
 
   const {
@@ -27,7 +29,6 @@ export function LoginForm() {
     resolver: zodResolver(loginSchema),
   })
 
-  // Mostrar errores de sesión desde URL params
   useEffect(() => {
     const error = searchParams.get('error')
     if (error === 'session_error') {
@@ -46,7 +47,7 @@ export function LoginForm() {
         toast.error(result.error)
         setLoading(false)
       }
-      // Si no hay error, el redirect se ejecutará automáticamente
+      // Si no hay error, se redirige automáticamente.
     } catch (error) {
       console.error('[LoginForm] Error inesperado:', error)
       toast.error('Error inesperado al iniciar sesión. Por favor, intenta nuevamente.')
@@ -76,28 +77,36 @@ export function LoginForm() {
             {...register('email')}
             disabled={loading}
           />
-          {errors.email && (
-            <p className="text-sm text-destructive">{errors.email.message}</p>
-          )}
+          {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="password">Contraseña</Label>
-          <Input
-            id="password"
-            type="password"
-            placeholder="••••••••"
-            {...register('password')}
-            disabled={loading}
-          />
-          {errors.password && (
-            <p className="text-sm text-destructive">{errors.password.message}</p>
-          )}
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="••••••••"
+              className="pr-10"
+              {...register('password')}
+              disabled={loading}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground"
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              disabled={loading}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-        </Button>
+        <LoadingButton type="submit" className="w-full" loading={loading} loadingText="Iniciando sesión...">
+          Iniciar Sesión
+        </LoadingButton>
       </form>
 
       <div className="relative">
@@ -109,12 +118,13 @@ export function LoginForm() {
         </div>
       </div>
 
-      <Button
+      <LoadingButton
         type="button"
         variant="outline"
         className="w-full"
         onClick={handleGoogleLogin}
-        disabled={loading}
+        loading={loading}
+        loadingText="Redirigiendo..."
       >
         <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
           <path
@@ -135,7 +145,7 @@ export function LoginForm() {
           />
         </svg>
         Google
-      </Button>
+      </LoadingButton>
     </div>
   )
 }

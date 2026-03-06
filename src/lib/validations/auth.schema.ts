@@ -27,11 +27,7 @@ export const registerSchema = z.object({
   password: z
     .string({ required_error: 'La contraseña es requerida' })
     .min(8, 'La contraseña debe tener al menos 8 caracteres')
-    .max(100, 'La contraseña es demasiado larga')
-    .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-      'La contraseña debe contener al menos una mayúscula, una minúscula y un número'
-    ),
+    .max(100, 'La contraseña es demasiado larga'),
   nombre: z
     .string({ required_error: 'El nombre es requerido' })
     .min(2, 'El nombre debe tener al menos 2 caracteres')
@@ -59,11 +55,7 @@ export const resetPasswordSchema = z.object({
   password: z
     .string({ required_error: 'La contraseña es requerida' })
     .min(8, 'La contraseña debe tener al menos 8 caracteres')
-    .max(100, 'La contraseña es demasiado larga')
-    .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-      'La contraseña debe contener al menos una mayúscula, una minúscula y un número'
-    ),
+    .max(100, 'La contraseña es demasiado larga'),
   confirmPassword: z
     .string({ required_error: 'Confirme su contraseña' })
     .min(1, 'Confirme su contraseña'),

@@ -1,7 +1,9 @@
 'use client'
 
+import { AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -34,7 +36,10 @@ export function ConfirmDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            {title}
+          </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -46,14 +51,15 @@ export function ConfirmDialog({
           >
             {cancelText}
           </Button>
-          <Button
+          <LoadingButton
             type="button"
             variant={confirmVariant}
+            loading={loading}
+            loadingText="Eliminando..."
             onClick={handleConfirm}
-            disabled={loading}
           >
-            {loading ? 'Procesando...' : confirmText}
-          </Button>
+            {confirmText}
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

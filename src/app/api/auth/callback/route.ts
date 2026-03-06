@@ -3,7 +3,7 @@
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
@@ -11,6 +11,12 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const supabase = await createClient()
+    let serviceRoleSupabase: ReturnType<typeof createServiceRoleClient> | null = null
+    try {
+      serviceRoleSupabase = createServiceRoleClient()
+    } catch (error) {
+      console.warn('[auth/callback] SUPABASE_SERVICE_ROLE_KEY no configurada, usando cliente estándar')
+    }
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && data.user) {
@@ -26,13 +32,19 @@ export async function GET(request: NextRequest) {
         const nombre = data.user.user_metadata?.full_name?.split(' ')[0] || 'Usuario'
         const apellido = data.user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || ''
 
-        await supabase.from('usuarios').insert({
+        const profilePayload = {
           id: data.user.id,
           email: data.user.email!,
           nombre,
           apellido,
           avatar_url: data.user.user_metadata?.avatar_url,
-        })
+        }
+
+        if (serviceRoleSupabase) {
+          await serviceRoleSupabase.from('usuarios').upsert(profilePayload)
+        } else {
+          await supabase.from('usuarios').insert(profilePayload)
+        }
       }
     }
   }

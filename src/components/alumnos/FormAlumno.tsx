@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
@@ -8,6 +8,7 @@ import { crearAlumno, actualizarAlumno, obtenerUsuariosDisponiblesParaAlumnos } 
 import { alumnoSchema, type AlumnoInput } from '@/lib/validations/alumno.schema'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -59,13 +60,7 @@ export function FormAlumno({
         },
   })
 
-  useEffect(() => {
-    if (open && !isEdit) {
-      cargarUsuariosDisponibles()
-    }
-  }, [open, isEdit])
-
-  const cargarUsuariosDisponibles = async () => {
+  const cargarUsuariosDisponibles = useCallback(async () => {
     setLoadingUsuarios(true)
     try {
       const result = await obtenerUsuariosDisponiblesParaAlumnos(sedeId)
@@ -77,7 +72,13 @@ export function FormAlumno({
     } finally {
       setLoadingUsuarios(false)
     }
-  }
+  }, [sedeId])
+
+  useEffect(() => {
+    if (open && !isEdit) {
+      cargarUsuariosDisponibles()
+    }
+  }, [open, isEdit, cargarUsuariosDisponibles])
 
   const onSubmit = async (data: AlumnoInput) => {
     setLoading(true)
@@ -218,9 +219,14 @@ export function FormAlumno({
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading || (!isEdit && usuarios.length === 0)}>
-              {loading ? 'Guardando...' : isEdit ? 'Actualizar' : 'Crear Alumno'}
-            </Button>
+            <LoadingButton
+              type="submit"
+              loading={loading}
+              disabled={!isEdit && usuarios.length === 0}
+              loadingText={isEdit ? 'Actualizando alumno...' : 'Creando alumno...'}
+            >
+              {isEdit ? 'Actualizar' : 'Crear Alumno'}
+            </LoadingButton>
           </div>
         </form>
       </DialogContent>

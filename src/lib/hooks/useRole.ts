@@ -5,7 +5,7 @@
 'use client'
 
 import { useAuth } from './useAuth'
-import { ROLES, type RolUsuario } from '../constants/roles'
+import { type RolUsuario } from '../constants/roles'
 import { getPermisosUsuario } from '../utils/permissions'
 
 export function useRole() {
@@ -28,10 +28,6 @@ export function useRole() {
   return {
     rol,
     loading,
-    isSuperAdmin: rol === ROLES.SUPER_ADMIN,
-    isAdmin: rol === ROLES.ADMIN,
-    isProfesor: rol === ROLES.PROFESOR,
-    isAlumno: rol === ROLES.ALUMNO,
     ...permisos,
   }
 }

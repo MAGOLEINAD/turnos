@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
@@ -10,6 +10,7 @@ import { reservaSchema, type ReservaInput } from '@/lib/validations/reserva.sche
 import { TIPO_RESERVA } from '@/lib/constants/estados'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -68,9 +69,9 @@ export function ModalNuevaReserva({
     if (open && alumnoId) {
       cargarCreditos()
     }
-  }, [open, alumnoId])
+  }, [open, alumnoId, cargarCreditos])
 
-  const cargarCreditos = async () => {
+  const cargarCreditos = useCallback(async () => {
     if (!alumnoId) return
 
     try {
@@ -84,7 +85,7 @@ export function ModalNuevaReserva({
     } catch (error) {
       console.error('Error al cargar créditos:', error)
     }
-  }
+  }, [alumnoId, sedeId])
 
   const onSubmit = async (data: ReservaInput) => {
     setLoading(true)
@@ -260,12 +261,17 @@ export function ModalNuevaReserva({
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Creando...' : usarCredito ? 'Reservar con Crédito' : 'Crear Reserva'}
-            </Button>
+            <LoadingButton
+              type="submit"
+              loading={loading}
+              loadingText={usarCredito ? 'Reservando con credito...' : 'Creando reserva...'}
+            >
+              {usarCredito ? 'Reservar con credito' : 'Crear reserva'}
+            </LoadingButton>
           </div>
         </form>
       </DialogContent>
     </Dialog>
   )
 }
+

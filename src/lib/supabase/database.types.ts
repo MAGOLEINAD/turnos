@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Tipos de base de datos generados desde Supabase
  *
  * IMPORTANTE: Este archivo debe ser regenerado cuando el esquema de DB cambie.
  * Comando: npx supabase gen types typescript --project-id <project-id> > src/lib/supabase/database.types.ts
  *
- * Por ahora, definimos tipos básicos. Los tipos completos se generarán desde Supabase CLI.
+ * Mientras tanto, mantenemos tipos explícitos para tablas críticas y un fallback
+ * para evitar que el resto de tablas quede inferido como never.
  */
 
 export type Json =
@@ -14,6 +15,13 @@ export type Json =
   | null
   | { [key: string]: Json | undefined }
   | Json[]
+
+type UnknownTable = {
+  Row: Record<string, unknown>
+  Insert: Record<string, unknown>
+  Update: Record<string, unknown>
+  Relationships: []
+}
 
 export interface Database {
   public: {
@@ -46,6 +54,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       sedes: {
         Row: {
@@ -84,9 +93,9 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
-      // TODO: Agregar tipos para todas las demás tablas
-      // Este archivo será regenerado desde Supabase CLI con todos los tipos
+      [key: string]: UnknownTable
     }
     Views: {
       [_ in never]: never

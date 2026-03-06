@@ -6,7 +6,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createClient } from '../supabase/server'
+import { createClient, createServiceRoleClient } from '../supabase/server'
 import type { LoginInput, RegisterInput } from '../validations/auth.schema'
 import { translateAuthError } from '../utils/error-messages'
 
@@ -28,14 +28,18 @@ export async function login(data: LoginInput) {
     return { error: 'Error al establecer la sesión' }
   }
 
-  console.log('[Login] Login exitoso para:', authData.user.email)
-
   revalidatePath('/', 'layout')
   redirect('/dashboard')
 }
 
 export async function register(data: RegisterInput) {
   const supabase = await createClient()
+  let serviceRoleSupabase: ReturnType<typeof createServiceRoleClient> | null = null
+  try {
+    serviceRoleSupabase = createServiceRoleClient()
+  } catch (error) {
+    console.warn('[register] SUPABASE_SERVICE_ROLE_KEY no configurada, usando cliente estándar')
+  }
 
   // 1. Crear usuario en Supabase Auth
   const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -51,13 +55,20 @@ export async function register(data: RegisterInput) {
     return { error: 'Error al crear usuario' }
   }
 
-  // 2. Crear registro en tabla usuarios
-  const { error: userError } = await supabase.from('usuarios').insert({
+  // 2. Crear/actualizar registro en tabla usuarios con service role
+  // signUp puede devolver user sin session (confirmación por email), lo que rompe RLS.
+  const userPayload = {
     id: authData.user.id,
     email: data.email,
     nombre: data.nombre,
     apellido: data.apellido,
-  })
+    activo: true,
+  }
+  const userQuery = serviceRoleSupabase
+    ? serviceRoleSupabase.from('usuarios').upsert(userPayload)
+    : supabase.from('usuarios').insert(userPayload)
+
+  const { error: userError } = await userQuery
 
   if (userError) {
     console.error('Error creando usuario:', userError)
@@ -108,11 +119,8 @@ export async function getUser() {
     }
 
     if (!user) {
-      console.log('[getUser] No hay usuario autenticado')
       return null
     }
-
-    console.log('[getUser] Usuario autenticado:', user.id, user.email)
 
     // Obtener datos completos del usuario con rol y sede
     const { data: usuario, error } = await supabase
@@ -139,7 +147,6 @@ export async function getUser() {
       return null
     }
 
-    console.log('[getUser] Usuario completo:', JSON.stringify(usuario, null, 2))
     return usuario
   } catch (error) {
     console.error('[getUser] Error inesperado:', error)
