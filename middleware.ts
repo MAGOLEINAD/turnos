@@ -46,8 +46,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  console.log('[Middleware]', request.nextUrl.pathname, '- Usuario:', user ? user.email : 'no autenticado')
-
   // Rutas protegidas que requieren autenticación
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login') ||
                       request.nextUrl.pathname.startsWith('/registro')
@@ -59,7 +57,6 @@ export async function middleware(request: NextRequest) {
 
   // Si el usuario no está autenticado y trata de acceder a ruta protegida
   if (!user && isProtectedRoute) {
-    console.log('[Middleware] Redirigiendo a /login - usuario no autenticado')
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = '/login'
     redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
@@ -74,7 +71,6 @@ export async function middleware(request: NextRequest) {
 
   // Si el usuario está autenticado y trata de acceder a login/registro
   if (user && isAuthRoute) {
-    console.log('[Middleware] Redirigiendo a /dashboard - usuario ya autenticado')
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = '/dashboard'
     return NextResponse.redirect(redirectUrl)
@@ -85,13 +81,12 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public (public files)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/login',
+    '/registro',
+    '/dashboard/:path*',
+    '/super-admin/:path*',
+    '/admin/:path*',
+    '/profesor/:path*',
+    '/alumno/:path*',
   ],
 }

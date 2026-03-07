@@ -13,8 +13,15 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  // Obtener rol principal
-  const rol = usuario.membresias?.[0]?.rol
+  if (usuario.requiere_seleccion_perfil) {
+    redirect('/dashboard/seleccionar-perfil')
+  }
+
+  if (!usuario.membresias || usuario.membresias.length === 0) {
+    redirect('/sin-acceso')
+  }
+
+  const rol = usuario.membresia_activa?.rol || usuario.membresias?.[0]?.rol
 
   if (rol) {
     redirect(getDashboardRoute(rol))

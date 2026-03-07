@@ -44,16 +44,19 @@ export default async function DashboardLayout({
 
   if (membresias) {
     for (const memb of membresias) {
-      if (memb.sedes && memb.sedes.activa) {
-        const sede = Array.isArray(memb.sedes) ? memb.sedes[0] : memb.sedes
-        if (sede && sede.id && sede.nombre) {
-          sedesMap.set(sede.id, { id: sede.id, nombre: sede.nombre })
-        }
+      const sede = Array.isArray(memb.sedes) ? memb.sedes[0] : memb.sedes
+      if (sede && sede.activa && sede.id && sede.nombre) {
+        sedesMap.set(sede.id, { id: sede.id, nombre: sede.nombre })
       }
     }
   }
 
   const sedes = Array.from(sedesMap.values())
+  const sedeActivaId = usuario?.membresia_activa?.sede_id || null
 
-  return <DashboardLayoutClient usuario={usuario} sedes={sedes}>{children}</DashboardLayoutClient>
+  return (
+    <DashboardLayoutClient usuario={usuario} sedes={sedes} sedeActivaId={sedeActivaId}>
+      {children}
+    </DashboardLayoutClient>
+  )
 }

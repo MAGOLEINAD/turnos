@@ -9,9 +9,7 @@ import { Button } from '../ui/button'
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import { toast } from 'sonner'
 import { Ban } from 'lucide-react'
-import { obtenerReservas } from '@/lib/actions/reservas.actions'
-import { obtenerHorariosFijos } from '@/lib/actions/horarios-fijos.actions'
-import { obtenerBloqueos } from '@/lib/actions/bloqueos.actions'
+import { obtenerDatosCalendarioProfesor } from '@/lib/actions/calendario-profesor.actions'
 import { reservaToEvent, horarioFijoToEvent, bloqueoToEvent } from '@/lib/utils/calendario'
 import { generarOcurrenciasMultiplesHorariosFijos } from '@/lib/utils/recurrencia'
 
@@ -23,77 +21,63 @@ interface CalendarioProfesorProps {
 
 export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: CalendarioProfesorProps) {
   const [eventos, setEventos] = useState<any[]>([])
+  const [reservasById, setReservasById] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
 
-  // Estado para modal de nueva reserva
   const [modalNuevaOpen, setModalNuevaOpen] = useState(false)
   const [fechaSeleccionada, setFechaSeleccionada] = useState<{
     inicio: Date
     fin: Date
   } | null>(null)
 
-  // Estado para modal de detalles
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false)
   const [reservaSeleccionada, setReservaSeleccionada] = useState<any>(null)
 
-  // Estado para modal de bloqueo
   const [modalBloqueoOpen, setModalBloqueoOpen] = useState(false)
 
   useEffect(() => {
     cargarEventos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profesorId])
 
   const cargarEventos = async () => {
     setLoading(true)
     try {
-      // Cargar reservas, horarios fijos y bloqueos en paralelo
-      const [reservasResult, horariosResult, bloqueosResult] = await Promise.all([
-        obtenerReservas(profesorId),
-        obtenerHorariosFijos(profesorId),
-        obtenerBloqueos(profesorId),
-      ])
-
-      const todosEventos: any[] = []
-
-      // Agregar reservas
-      if (reservasResult.data) {
-        const eventosReservas = reservasResult.data.map(reservaToEvent)
-        todosEventos.push(...eventosReservas)
+      const result = await obtenerDatosCalendarioProfesor(profesorId)
+      if (result.error || !result.data) {
+        toast.error(result.error || 'Error al cargar eventos')
+        setEventos([])
+        return
       }
 
-      // Agregar horarios fijos
-      if (horariosResult.data && horariosResult.data.length > 0) {
-        // Generar ocurrencias para los próximos 3 meses
+      const { reservas, horarios, bloqueos } = result.data
+      const todosEventos: any[] = []
+      const nextReservasById: Record<string, any> = {}
+
+      for (const reserva of reservas) {
+        nextReservasById[reserva.id] = reserva
+      }
+      todosEventos.push(...reservas.map(reservaToEvent))
+
+      if (horarios.length > 0) {
         const hoy = new Date()
         const dentroTresMeses = new Date()
         dentroTresMeses.setMonth(dentroTresMeses.getMonth() + 3)
 
-        const ocurrencias = generarOcurrenciasMultiplesHorariosFijos(
-          horariosResult.data,
-          hoy,
-          dentroTresMeses
-        )
+        const ocurrencias = generarOcurrenciasMultiplesHorariosFijos(horarios, hoy, dentroTresMeses)
 
-        // Convertir ocurrencias a eventos
         for (const ocurrencia of ocurrencias) {
-          const horarioFijo = horariosResult.data.find(
-            (h: any) => h.id === ocurrencia.horarioFijoId
-          )
-          if (horarioFijo) {
-            const evento = horarioFijoToEvent(horarioFijo, ocurrencia.fecha)
-            todosEventos.push(evento)
-          }
+          const horarioFijo = horarios.find((h: any) => h.id === ocurrencia.horarioFijoId)
+          if (!horarioFijo) continue
+          todosEventos.push(horarioFijoToEvent(horarioFijo, ocurrencia.fecha))
         }
       }
 
-      // Agregar bloqueos
-      if (bloqueosResult.data) {
-        const eventosBloqueos = bloqueosResult.data.map(bloqueoToEvent)
-        todosEventos.push(...eventosBloqueos)
-      }
+      todosEventos.push(...bloqueos.map(bloqueoToEvent))
 
+      setReservasById(nextReservasById)
       setEventos(todosEventos)
-    } catch (error) {
+    } catch {
       toast.error('Error al cargar eventos')
       setEventos([])
     } finally {
@@ -107,23 +91,15 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
 
     setFechaSeleccionada({ inicio, fin })
     setModalNuevaOpen(true)
-
-    // Deseleccionar en el calendario
     selectInfo.view.calendar.unselect()
   }
 
-  const handleEventClick = async (clickInfo: EventClickArg) => {
+  const handleEventClick = (clickInfo: EventClickArg) => {
     const reservaId = clickInfo.event.id
-
-    // Buscar la reserva completa
-    const result = await obtenerReservas(profesorId)
-    if (result.data) {
-      const reserva = result.data.find((r: any) => r.id === reservaId)
-      if (reserva) {
-        setReservaSeleccionada(reserva)
-        setModalDetalleOpen(true)
-      }
-    }
+    const reserva = reservasById[reservaId]
+    if (!reserva) return
+    setReservaSeleccionada(reserva)
+    setModalDetalleOpen(true)
   }
 
   const handleReservaSuccess = () => {
@@ -138,10 +114,7 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
     <>
       <div className="space-y-4">
         <div className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setModalBloqueoOpen(true)}
-          >
+          <Button variant="outline" onClick={() => setModalBloqueoOpen(true)}>
             <Ban className="h-4 w-4 mr-2" />
             Bloquear Disponibilidad
           </Button>
@@ -175,7 +148,6 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
         </div>
       </div>
 
-      {/* Modales */}
       {fechaSeleccionada && (
         <ModalNuevaReserva
           open={modalNuevaOpen}
@@ -204,3 +176,4 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
     </>
   )
 }
+

@@ -4,9 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import { toast } from 'sonner'
 import { Ban } from 'lucide-react'
-import { obtenerReservas } from '@/lib/actions/reservas.actions'
-import { obtenerHorariosFijos } from '@/lib/actions/horarios-fijos.actions'
-import { obtenerBloqueos } from '@/lib/actions/bloqueos.actions'
+import { obtenerDatosAgendaProfesor } from '@/lib/actions/calendario-profesor.actions'
 import { bloqueoToEvent, horarioFijoToEvent, reservaToEvent } from '@/lib/utils/calendario'
 import { generarOcurrenciasMultiplesHorariosFijos } from '@/lib/utils/recurrencia'
 import { CalendarioFullCalendar } from '@/components/calendario/CalendarioFullCalendar'
@@ -48,6 +46,12 @@ export function CalendarioProfesorAgenda({ perfiles }: CalendarioProfesorAgendaP
     return map
   }, [perfiles])
 
+  const perfilByProfesorId = useMemo(() => {
+    const map = new Map<string, PerfilProfesorAgenda>()
+    perfiles.forEach((perfil) => map.set(perfil.id, perfil))
+    return map
+  }, [perfiles])
+
   const colorBySede = useMemo(() => {
     const map = new Map<string, string>()
     perfiles.forEach((perfil, index) => {
@@ -67,22 +71,14 @@ export function CalendarioProfesorAgenda({ perfiles }: CalendarioProfesorAgendaP
 
     setLoading(true)
     try {
-      const resultados = await Promise.all(
-        perfiles.map(async (perfil) => {
-          const [reservasResult, horariosResult, bloqueosResult] = await Promise.all([
-            obtenerReservas(perfil.id),
-            obtenerHorariosFijos(perfil.id),
-            obtenerBloqueos(perfil.id),
-          ])
-          return {
-            perfil,
-            reservas: reservasResult.data || [],
-            horarios: horariosResult.data || [],
-            bloqueos: bloqueosResult.data || [],
-          }
-        })
-      )
+      const result = await obtenerDatosAgendaProfesor(perfiles.map((perfil) => perfil.id))
+      if (result.error || !result.data) {
+        toast.error(result.error || 'No se pudo cargar la agenda unificada.')
+        setEventos([])
+        return
+      }
 
+      const { reservas, horarios, bloqueos } = result.data
       const mergedEvents: any[] = []
       const nextReservasById: Record<string, any> = {}
 
@@ -90,24 +86,35 @@ export function CalendarioProfesorAgenda({ perfiles }: CalendarioProfesorAgendaP
       const dentroTresMeses = new Date()
       dentroTresMeses.setMonth(dentroTresMeses.getMonth() + 3)
 
-      for (const result of resultados) {
-        const sedeColor = colorBySede.get(result.perfil.sede_id) || '#2563EB'
-        const sedeTag = `[${result.perfil.sede_nombre}]`
+      for (const reserva of reservas) {
+        nextReservasById[reserva.id] = reserva
+        const perfil = perfilByProfesorId.get(reserva.profesor_id)
+        const sedeColor = perfil ? colorBySede.get(perfil.sede_id) || '#2563EB' : '#2563EB'
+        const sedeTag = perfil ? `[${perfil.sede_nombre}]` : '[Sede]'
+        const evento = reservaToEvent(reserva)
+        mergedEvents.push({
+          ...evento,
+          title: `${sedeTag} ${evento.title}`,
+          backgroundColor: sedeColor,
+          borderColor: sedeColor,
+        })
+      }
 
-        for (const reserva of result.reservas) {
-          nextReservasById[reserva.id] = reserva
-          const evento = reservaToEvent(reserva)
-          mergedEvents.push({
-            ...evento,
-            title: `${sedeTag} ${evento.title}`,
-            backgroundColor: sedeColor,
-            borderColor: sedeColor,
-          })
-        }
+      const horariosByProfesor = new Map<string, any[]>()
+      for (const horario of horarios) {
+        const lista = horariosByProfesor.get(horario.profesor_id) || []
+        lista.push(horario)
+        horariosByProfesor.set(horario.profesor_id, lista)
+      }
 
-        const ocurrencias = generarOcurrenciasMultiplesHorariosFijos(result.horarios, hoy, dentroTresMeses)
+      for (const [profesorId, horariosProfesor] of horariosByProfesor.entries()) {
+        const perfil = perfilByProfesorId.get(profesorId)
+        const sedeColor = perfil ? colorBySede.get(perfil.sede_id) || '#2563EB' : '#2563EB'
+        const sedeTag = perfil ? `[${perfil.sede_nombre}]` : '[Sede]'
+
+        const ocurrencias = generarOcurrenciasMultiplesHorariosFijos(horariosProfesor, hoy, dentroTresMeses)
         for (const ocurrencia of ocurrencias) {
-          const horario = result.horarios.find((h: any) => h.id === ocurrencia.horarioFijoId)
+          const horario = horariosProfesor.find((h: any) => h.id === ocurrencia.horarioFijoId)
           if (!horario) continue
           const evento = horarioFijoToEvent(horario, ocurrencia.fecha)
           mergedEvents.push({
@@ -119,21 +126,24 @@ export function CalendarioProfesorAgenda({ perfiles }: CalendarioProfesorAgendaP
             end: evento.end instanceof Date ? evento.end.toISOString() : evento.end,
           })
         }
+      }
 
-        for (const bloqueo of result.bloqueos) {
-          const evento = bloqueoToEvent(bloqueo)
-          mergedEvents.push({
-            ...evento,
-            title: `${sedeTag} ${evento.title}`,
-            backgroundColor: `${sedeColor}33`,
-            borderColor: sedeColor,
-          })
-        }
+      for (const bloqueo of bloqueos) {
+        const perfil = perfilByProfesorId.get(bloqueo.profesor_id)
+        const sedeColor = perfil ? colorBySede.get(perfil.sede_id) || '#2563EB' : '#2563EB'
+        const sedeTag = perfil ? `[${perfil.sede_nombre}]` : '[Sede]'
+        const evento = bloqueoToEvent(bloqueo)
+        mergedEvents.push({
+          ...evento,
+          title: `${sedeTag} ${evento.title}`,
+          backgroundColor: `${sedeColor}33`,
+          borderColor: sedeColor,
+        })
       }
 
       setReservasById(nextReservasById)
       setEventos(mergedEvents)
-    } catch (error) {
+    } catch {
       toast.error('No se pudo cargar la agenda unificada.')
       setEventos([])
     } finally {
@@ -248,3 +258,4 @@ export function CalendarioProfesorAgenda({ perfiles }: CalendarioProfesorAgendaP
     </>
   )
 }
+

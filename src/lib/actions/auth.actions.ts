@@ -8,8 +8,28 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import { createClient, createServiceRoleClient } from '../supabase/server'
+import { getDashboardRoute } from '../constants/navigation'
+import type { RolUsuario } from '../constants/roles'
 import type { LoginInput, RegisterInput } from '../validations/auth.schema'
 import { translateAuthError } from '../utils/error-messages'
+
+type MembresiaAuth = {
+  id: string
+  rol: RolUsuario
+  activa: boolean
+  sede_id: string | null
+  organizacion_id: string | null
+  organizaciones?: {
+    id?: string
+    nombre?: string
+    activa?: boolean
+    motivo_desactivacion?: string | null
+  } | null
+  sedes?: {
+    id?: string
+    nombre?: string
+  } | null
+}
 
 function isMembresiaHabilitada(membresia: any) {
   if (!membresia?.activa) return false
@@ -23,28 +43,154 @@ function isMembresiaHabilitada(membresia: any) {
   return org.activa !== false
 }
 
+function orderMembresiasByActive(membresias: MembresiaAuth[], activa: MembresiaAuth | null) {
+  if (!activa) return membresias
+  return [activa, ...membresias.filter((m) => m.id !== activa.id)]
+}
+
+function normalizeRel<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] || null : value
+}
+
+function sanitizeMembresias(base: any[]): MembresiaAuth[] {
+  return (base || []).map((m: any) => ({
+    id: m.id,
+    rol: m.rol,
+    activa: m.activa,
+    sede_id: m.sede_id || null,
+    organizacion_id: m.organizacion_id || null,
+    organizaciones: normalizeRel(m.organizaciones),
+    sedes: normalizeRel(m.sedes),
+  }))
+}
+
+async function getServiceRoleClientSafe() {
+  try {
+    return createServiceRoleClient()
+  } catch {
+    return null
+  }
+}
+
+async function getContextoActivo(usuarioId: string) {
+  const service = await getServiceRoleClientSafe()
+  if (!service) return null
+
+  const { data, error } = await service
+    .from('usuario_contexto_activo')
+    .select('membresia_id')
+    .eq('usuario_id', usuarioId)
+    .single()
+
+  if (error || !data?.membresia_id) return null
+  return data.membresia_id as string
+}
+
+async function setContextoActivo(usuarioId: string, membresiaId: string) {
+  const service = await getServiceRoleClientSafe()
+  if (!service) return
+
+  await service
+    .from('usuario_contexto_activo')
+    .upsert(
+      {
+        usuario_id: usuarioId,
+        membresia_id: membresiaId,
+      },
+      { onConflict: 'usuario_id' }
+    )
+}
+
+async function ensurePerfilPorRol(usuarioId: string, membresia: MembresiaAuth) {
+  const service = await getServiceRoleClientSafe()
+  if (!service) return
+  if (!membresia.sede_id) return
+
+  if (membresia.rol === 'profesor') {
+    await service
+      .from('profesores')
+      .upsert(
+        {
+          usuario_id: usuarioId,
+          sede_id: membresia.sede_id,
+          activo: true,
+        },
+        { onConflict: 'usuario_id,sede_id' }
+      )
+  }
+
+  if (membresia.rol === 'alumno') {
+    await service
+      .from('alumnos')
+      .upsert(
+        {
+          usuario_id: usuarioId,
+          sede_id: membresia.sede_id,
+          activo: true,
+        },
+        { onConflict: 'usuario_id,sede_id' }
+      )
+  }
+}
+
 async function getMembresiasConEstadoOrganizacion(supabase: any, usuarioId: string) {
   const { data: membresias, error } = await supabase
     .from('membresias')
-    .select('rol, activa, sede_id, organizacion_id, organizaciones(activa, motivo_desactivacion), sedes(nombre)')
+    .select('id, rol, activa, sede_id, organizacion_id, organizaciones(id, nombre, activa, motivo_desactivacion), sedes(id, nombre)')
     .eq('usuario_id', usuarioId)
 
   if (!error) {
-    return { data: membresias || [], error: null }
+    return { data: sanitizeMembresias(membresias || []), error: null }
+  }
+
+  // Fallback 1: service role para evitar bloquear auth por RLS.
+  const serviceRoleSupabase = await getServiceRoleClientSafe()
+  if (serviceRoleSupabase) {
+    const { data: serviceData, error: serviceError } = await serviceRoleSupabase
+      .from('membresias')
+      .select('id, rol, activa, sede_id, organizacion_id, organizaciones(id, nombre, activa, motivo_desactivacion), sedes(id, nombre)')
+      .eq('usuario_id', usuarioId)
+
+    if (!serviceError) {
+      console.warn('[auth] Fallback service role en membresias.', {
+        code: error.code,
+        message: error.message,
+      })
+      return { data: sanitizeMembresias(serviceData || []), error: null }
+    }
   }
 
   // Fallback defensivo: si falla el join con organizaciones (RLS/datos),
   // no bloquear el acceso por completo.
   const { data: membresiasBase, error: baseError } = await supabase
     .from('membresias')
-    .select('rol, activa, sede_id, organizacion_id')
+    .select('id, rol, activa, sede_id, organizacion_id')
     .eq('usuario_id', usuarioId)
 
   if (baseError) {
+    if (serviceRoleSupabase) {
+      const { data: serviceBase, error: serviceBaseError } = await serviceRoleSupabase
+        .from('membresias')
+        .select('id, rol, activa, sede_id, organizacion_id')
+        .eq('usuario_id', usuarioId)
+
+      if (!serviceBaseError) {
+        return {
+          data: sanitizeMembresias(serviceBase || []).map((m) => ({
+            ...m,
+            organizaciones: null,
+            sedes: null,
+          })),
+          error: null,
+        }
+      }
+    }
+
     return { data: null, error: baseError }
   }
 
-  const sanitized = (membresiasBase || []).map((m: any) => ({
+  const sanitized = sanitizeMembresias(membresiasBase || []).map((m: any) => ({
     ...m,
     organizaciones: null,
     sedes: null,
@@ -110,14 +256,27 @@ export async function login(data: LoginInput) {
 
   const tieneMembresias = (membresias || []).length > 0
   const tieneAccesoHabilitado = (membresias || []).some(isMembresiaHabilitada)
+  const membresiasHabilitadas = (membresias || []).filter(isMembresiaHabilitada)
 
   if (tieneMembresias && !tieneAccesoHabilitado) {
     await supabase.auth.signOut()
     return { error: 'El cliente asociado a tu cuenta esta desactivado.' }
   }
 
+  if (!tieneMembresias || membresiasHabilitadas.length === 0) {
+    revalidatePath('/', 'layout')
+    redirect('/sin-acceso')
+  }
+
+  if (membresiasHabilitadas.length === 1) {
+    await ensurePerfilPorRol(authData.user.id, membresiasHabilitadas[0])
+    await setContextoActivo(authData.user.id, membresiasHabilitadas[0].id)
+    revalidatePath('/', 'layout')
+    redirect(getDashboardRoute(membresiasHabilitadas[0].rol))
+  }
+
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect('/dashboard/seleccionar-perfil')
 }
 
 export async function register(data: RegisterInput) {
@@ -242,14 +401,28 @@ const getUserCached = cache(async () => {
       return null
     }
 
-    usuario.membresias = membresias || []
-
-    const tieneMembresias = membresias.length > 0
-    const tieneAccesoHabilitado = membresias.some(isMembresiaHabilitada)
+    const membresiasUsuario = (membresias || []) as MembresiaAuth[]
+    const tieneMembresias = membresiasUsuario.length > 0
+    const membresiasHabilitadas = membresiasUsuario.filter(isMembresiaHabilitada)
+    const tieneAccesoHabilitado = membresiasHabilitadas.length > 0
 
     if (tieneMembresias && !tieneAccesoHabilitado) {
       return null
     }
+
+    const contextoActivoId = await getContextoActivo(user.id)
+    let membresiaActiva =
+      membresiasHabilitadas.find((m) => m.id === contextoActivoId) || null
+
+    if (!membresiaActiva && membresiasHabilitadas.length === 1) {
+      membresiaActiva = membresiasHabilitadas[0]
+      await setContextoActivo(user.id, membresiaActiva.id)
+    }
+
+    usuario.membresias = orderMembresiasByActive(membresiasUsuario, membresiaActiva)
+    usuario.membresia_activa = membresiaActiva
+    usuario.requiere_seleccion_perfil = membresiasHabilitadas.length > 1 && !membresiaActiva
+    usuario.tiene_multiples_perfiles = membresiasHabilitadas.length > 1
 
     return usuario
   } catch (error) {
@@ -260,4 +433,33 @@ const getUserCached = cache(async () => {
 
 export async function getUser() {
   return getUserCached()
+}
+
+export async function seleccionarPerfilActivo(membresiaId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const { data: membresias, error } = await getMembresiasConEstadoOrganizacion(supabase, user.id)
+
+  if (error || !membresias) {
+    return { error: 'No se pudieron validar los perfiles disponibles.' }
+  }
+
+  const membresiasHabilitadas = membresias.filter(isMembresiaHabilitada)
+  const membresiaSeleccionada = membresiasHabilitadas.find((m) => m.id === membresiaId)
+
+  if (!membresiaSeleccionada) {
+    return { error: 'El perfil seleccionado no es valido o no esta activo.' }
+  }
+
+  await ensurePerfilPorRol(user.id, membresiaSeleccionada)
+  await setContextoActivo(user.id, membresiaSeleccionada.id)
+  revalidatePath('/', 'layout')
+  redirect(getDashboardRoute(membresiaSeleccionada.rol))
 }

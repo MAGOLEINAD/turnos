@@ -15,7 +15,7 @@ interface SidebarProps {
 
 export function Sidebar({ usuario }: SidebarProps) {
   const pathname = usePathname()
-  const rol = usuario?.membresias?.[0]?.rol
+  const rol = usuario?.membresia_activa?.rol || usuario?.membresias?.[0]?.rol
   const navItems = getNavForRole(rol)
 
   return (

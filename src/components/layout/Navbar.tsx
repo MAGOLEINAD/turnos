@@ -4,7 +4,8 @@
 
 'use client'
 
-import { LogOut, Menu, MapPin } from 'lucide-react'
+import Link from 'next/link'
+import { LogOut, Menu, MapPin, Repeat } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -20,15 +21,16 @@ import { ROLES_ICONS, ROLES_LABELS, type RolUsuario } from '@/lib/constants/role
 interface NavbarProps {
   usuario: any
   sedes?: Array<{ id: string; nombre: string }>
+  sedeActivaId?: string | null
   onMenuClick?: () => void
 }
 
-export function Navbar({ usuario, sedes = [], onMenuClick }: NavbarProps) {
-  const rol = usuario?.membresias?.[0]?.rol as RolUsuario | undefined
+export function Navbar({ usuario, sedes = [], sedeActivaId = null, onMenuClick }: NavbarProps) {
+  const rol = (usuario?.membresia_activa?.rol || usuario?.membresias?.[0]?.rol) as RolUsuario | undefined
   const rolLabel = rol ? `${ROLES_ICONS[rol]} ${ROLES_LABELS[rol]}` : 'Sin rol'
 
-  // Mostrar la primera sede como título principal
-  const sedePrincipal = sedes.length > 0 ? sedes[0].nombre : 'Dashboard'
+  const sedeActiva = sedes.find((sede) => sede.id === sedeActivaId)
+  const sedePrincipal = sedeActiva?.nombre || sedes[0]?.nombre || 'Dashboard'
 
   return (
     <header className="h-16 border-b border-gray-200 bg-white flex items-center justify-between px-4 md:px-6">
@@ -39,7 +41,7 @@ export function Navbar({ usuario, sedes = [], onMenuClick }: NavbarProps) {
             size="icon"
             onClick={onMenuClick}
             className="md:hidden"
-            aria-label="Abrir menú"
+            aria-label="Abrir menu"
           >
             <Menu className="h-6 w-6" />
           </Button>
@@ -62,18 +64,24 @@ export function Navbar({ usuario, sedes = [], onMenuClick }: NavbarProps) {
                 <div className="text-sm font-medium">
                   {usuario?.nombre} {usuario?.apellido}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {rolLabel}
-                </div>
+                <div className="text-xs text-muted-foreground">{rolLabel}</div>
               </div>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {usuario?.tiene_multiples_perfiles ? (
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/seleccionar-perfil" className="flex items-center">
+                  <Repeat className="mr-2 h-4 w-4" />
+                  Cambiar perfil
+                </Link>
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onClick={() => logout()}>
               <LogOut className="mr-2 h-4 w-4" />
-              Cerrar Sesión
+              Cerrar Sesion
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

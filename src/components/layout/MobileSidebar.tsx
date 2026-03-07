@@ -23,7 +23,7 @@ interface MobileSidebarProps {
 
 export function MobileSidebar({ usuario, isOpen, onClose }: MobileSidebarProps) {
   const pathname = usePathname()
-  const rol = usuario?.membresias?.[0]?.rol
+  const rol = usuario?.membresia_activa?.rol || usuario?.membresias?.[0]?.rol
   const navItems = getNavForRole(rol)
 
   return (

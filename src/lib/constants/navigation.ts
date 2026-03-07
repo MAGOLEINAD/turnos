@@ -15,10 +15,6 @@ export interface NavItem {
 // Navegación para Super Admin
 export const NAV_SUPER_ADMIN: NavItem[] = [
   {
-    title: 'Dashboard',
-    href: '/dashboard',
-  },
-  {
     title: 'Clientes',
     href: '/super-admin/organizaciones',
   },
@@ -38,10 +34,6 @@ export const NAV_SUPER_ADMIN: NavItem[] = [
 
 // Navegación para Admin
 export const NAV_ADMIN: NavItem[] = [
-  {
-    title: 'Dashboard',
-    href: '/dashboard',
-  },
   {
     title: 'Mis Sedes',
     href: '/admin/sedes',
@@ -71,10 +63,6 @@ export const NAV_ADMIN: NavItem[] = [
 // Navegación para Profesor
 export const NAV_PROFESOR: NavItem[] = [
   {
-    title: 'Dashboard',
-    href: '/dashboard',
-  },
-  {
     title: 'Mi Agenda',
     href: '/profesor/agenda',
   },
@@ -82,26 +70,10 @@ export const NAV_PROFESOR: NavItem[] = [
     title: 'Calendario Sede',
     href: '/profesor/calendario',
   },
-  {
-    title: 'Reservas',
-    href: '/profesor/reservas',
-  },
-  {
-    title: 'Bloqueos',
-    href: '/profesor/bloqueos',
-  },
-  {
-    title: 'Alumnos',
-    href: '/profesor/alumnos',
-  },
 ]
 
 // Navegación para Alumno
 export const NAV_ALUMNO: NavItem[] = [
-  {
-    title: 'Dashboard',
-    href: '/dashboard',
-  },
   {
     title: 'Calendario',
     href: '/alumno/calendario',

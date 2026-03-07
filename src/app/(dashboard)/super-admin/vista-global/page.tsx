@@ -94,20 +94,14 @@ export default async function VistaGlobalPage({ searchParams }: VistaGlobalPageP
         <Card>
           <CardHeader>
             <CardTitle>Profesor</CardTitle>
-            <CardDescription>Agenda operativa diaria.</CardDescription>
+            <CardDescription>Agenda personal y operativa por sede.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <Button asChild variant="outline" className="w-full justify-start">
-              <Link href="/profesor/calendario">Calendario</Link>
+              <Link href="/profesor/agenda">Mi Agenda</Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-start">
-              <Link href="/profesor/reservas">Reservas</Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-start">
-              <Link href="/profesor/bloqueos">Bloqueos</Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-start">
-              <Link href="/profesor/alumnos">Alumnos</Link>
+              <Link href="/profesor/calendario">Calendario Sede</Link>
             </Button>
           </CardContent>
         </Card>
