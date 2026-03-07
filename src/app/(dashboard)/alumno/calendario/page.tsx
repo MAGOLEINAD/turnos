@@ -21,8 +21,8 @@ export default async function AlumnoCalendarioPage() {
     .not('sede_id', 'is', null)
 
   const sedeIdsPermitidas = (membresiasAlumno || [])
-    .map((m) => m.sede_id)
-    .filter((id): id is string => !!id)
+    .map((m: any) => m.sede_id)
+    .filter((id: any): id is string => !!id)
 
   if (sedeIdsPermitidas.length === 0) {
     return (
@@ -46,7 +46,7 @@ export default async function AlumnoCalendarioPage() {
     .in('sede_id', sedeIdsPermitidas)
     .eq('activo', true)
 
-  const alumno = (perfilesAlumno || []).find((perfil) => perfil.sede_id === sedeContexto) || perfilesAlumno?.[0]
+  const alumno = (perfilesAlumno || []).find((perfil: any) => perfil.sede_id === sedeContexto) || perfilesAlumno?.[0]
 
   if (!alumno) {
     return (

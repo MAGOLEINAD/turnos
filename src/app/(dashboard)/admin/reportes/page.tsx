@@ -103,7 +103,7 @@ export default async function AdminReportesPage({ searchParams }: AdminReportesP
                 className="mt-1 w-full rounded-md border px-3 py-2"
                 disabled={sedesDisponibles.length <= 1}
               >
-                {sedesDisponibles.map((sede) => (
+                {sedesDisponibles.map((sede: any) => (
                   <option key={sede.id} value={sede.id}>
                     {sede.nombre}
                   </option>

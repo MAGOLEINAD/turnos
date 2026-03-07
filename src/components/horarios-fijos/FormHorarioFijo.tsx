@@ -61,6 +61,7 @@ export function FormHorarioFijo({
     if (open) {
       cargarProfesoresYAlumnos()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const cargarProfesoresYAlumnos = async () => {

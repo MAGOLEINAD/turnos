@@ -36,11 +36,11 @@ export default async function AdminAlumnosPage({ searchParams }: AdminAlumnosPag
 
   const sedesDisponibles = ctx.sedes
   // Si no hay parámetro sede, obtener alumnos de todas las sedes
-  const sedeSeleccionada = searchParams?.sede || null
+  const sedeSeleccionada = searchParams?.sede
 
   const result = sedeSeleccionada
     ? await obtenerAlumnos(sedeSeleccionada)
-    : await obtenerAlumnos(null) // null = todas las sedes del admin
+    : await obtenerAlumnos() // sin sede = todas las sedes del admin
 
   if (result.error) {
     return (
@@ -60,7 +60,7 @@ export default async function AdminAlumnosPage({ searchParams }: AdminAlumnosPag
           </p>
         </div>
 
-        <SedeContextSelector sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada} />
+        <SedeContextSelector sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada ?? null} />
       </div>
 
       <AlumnosList alumnos={result.data || []} sedeId={sedeSeleccionada || sedesDisponibles[0]?.id} />

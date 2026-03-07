@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { CalendarioFullCalendar } from './CalendarioFullCalendar'
 import { ModalNuevaReserva } from './ModalNuevaReserva'
 import { ModalDetalleReserva } from './ModalDetalleReserva'
@@ -9,7 +9,7 @@ import { Button } from '../ui/button'
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import { toast } from 'sonner'
 import { Ban } from 'lucide-react'
-import { obtenerDatosCalendarioProfesor } from '@/lib/actions/calendario-profesor.actions'
+import { useCalendarioProfesor, useInvalidarCalendarioProfesor } from '@/hooks/useCalendarioProfesor'
 import { reservaToEvent, horarioFijoToEvent, bloqueoToEvent } from '@/lib/utils/calendario'
 import { generarOcurrenciasMultiplesHorariosFijos } from '@/lib/utils/recurrencia'
 
@@ -20,10 +20,6 @@ interface CalendarioProfesorProps {
 }
 
 export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: CalendarioProfesorProps) {
-  const [eventos, setEventos] = useState<any[]>([])
-  const [reservasById, setReservasById] = useState<Record<string, any>>({})
-  const [loading, setLoading] = useState(true)
-
   const [modalNuevaOpen, setModalNuevaOpen] = useState(false)
   const [fechaSeleccionada, setFechaSeleccionada] = useState<{
     inicio: Date
@@ -35,55 +31,51 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
 
   const [modalBloqueoOpen, setModalBloqueoOpen] = useState(false)
 
-  useEffect(() => {
-    cargarEventos()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profesorId])
+  // React Query maneja loading, error y caching automáticamente
+  const { data, isLoading, error } = useCalendarioProfesor(profesorId)
+  const invalidarCalendario = useInvalidarCalendarioProfesor()
 
-  const cargarEventos = async () => {
-    setLoading(true)
-    try {
-      const result = await obtenerDatosCalendarioProfesor(profesorId)
-      if (result.error || !result.data) {
-        toast.error(result.error || 'Error al cargar eventos')
-        setEventos([])
-        return
-      }
+  // Procesar eventos (memoizado)
+  const { eventos, reservasById } = useMemo(() => {
+    if (!data) return { eventos: [], reservasById: {} }
 
-      const { reservas, horarios, bloqueos } = result.data
-      const todosEventos: any[] = []
-      const nextReservasById: Record<string, any> = {}
+    const { reservas, horarios, bloqueos } = data
+    const todosEventos: any[] = []
+    const nextReservasById: Record<string, any> = {}
 
-      for (const reserva of reservas) {
-        nextReservasById[reserva.id] = reserva
-      }
-      todosEventos.push(...reservas.map(reservaToEvent))
-
-      if (horarios.length > 0) {
-        const hoy = new Date()
-        const dentroTresMeses = new Date()
-        dentroTresMeses.setMonth(dentroTresMeses.getMonth() + 3)
-
-        const ocurrencias = generarOcurrenciasMultiplesHorariosFijos(horarios, hoy, dentroTresMeses)
-
-        for (const ocurrencia of ocurrencias) {
-          const horarioFijo = horarios.find((h: any) => h.id === ocurrencia.horarioFijoId)
-          if (!horarioFijo) continue
-          todosEventos.push(horarioFijoToEvent(horarioFijo, ocurrencia.fecha))
-        }
-      }
-
-      todosEventos.push(...bloqueos.map(bloqueoToEvent))
-
-      setReservasById(nextReservasById)
-      setEventos(todosEventos)
-    } catch {
-      toast.error('Error al cargar eventos')
-      setEventos([])
-    } finally {
-      setLoading(false)
+    // Procesar reservas
+    for (const reserva of reservas) {
+      nextReservasById[reserva.id] = reserva
     }
-  }
+    todosEventos.push(...reservas.map(reservaToEvent))
+
+    // Procesar horarios fijos
+    if (horarios.length > 0) {
+      const hoy = new Date()
+      const dentroTresMeses = new Date()
+      dentroTresMeses.setMonth(dentroTresMeses.getMonth() + 3)
+
+      const ocurrencias = generarOcurrenciasMultiplesHorariosFijos(horarios, hoy, dentroTresMeses)
+
+      for (const ocurrencia of ocurrencias) {
+        const horarioFijo = horarios.find((h: any) => h.id === ocurrencia.horarioFijoId)
+        if (!horarioFijo) continue
+        todosEventos.push(horarioFijoToEvent(horarioFijo, ocurrencia.fecha))
+      }
+    }
+
+    // Procesar bloqueos
+    todosEventos.push(...bloqueos.map(bloqueoToEvent))
+
+    return { eventos: todosEventos, reservasById: nextReservasById }
+  }, [data])
+
+  // Mostrar error si existe
+  useEffect(() => {
+    if (error) {
+      toast.error('Error al cargar eventos')
+    }
+  }, [error])
 
   const handleDateSelect = (selectInfo: DateSelectArg) => {
     const inicio = new Date(selectInfo.start)
@@ -103,10 +95,11 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
   }
 
   const handleReservaSuccess = () => {
-    cargarEventos()
+    // React Query invalida y refresca automáticamente
+    invalidarCalendario()
   }
 
-  if (loading) {
+  if (isLoading) {
     return <div className="text-center py-12">Cargando calendario...</div>
   }
 

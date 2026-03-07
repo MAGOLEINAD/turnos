@@ -20,8 +20,8 @@ export default async function ProfesorAgendaPage() {
     .not('sede_id', 'is', null)
 
   const sedeIdsPermitidas = (membresiasProfesor || [])
-    .map((m) => m.sede_id)
-    .filter((id): id is string => !!id)
+    .map((m: any) => m.sede_id)
+    .filter((id: any): id is string => !!id)
 
   if (sedeIdsPermitidas.length === 0) {
     return (

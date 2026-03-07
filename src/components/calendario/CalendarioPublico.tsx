@@ -31,6 +31,7 @@ export function CalendarioPublico({
 
   useEffect(() => {
     cargarEventos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sedeId])
 
   const cargarEventos = async () => {

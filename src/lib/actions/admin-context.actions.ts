@@ -95,7 +95,7 @@ export async function getAdminSedeContext(searchSede?: string) {
 
   const sedes = result.data || []
   const sedeSeleccionada =
-    (searchSede && sedes.find((s) => s.id === searchSede)?.id) ||
+    (searchSede && sedes.find((s: any) => s.id === searchSede)?.id) ||
     sedes[0]?.id ||
     ''
 

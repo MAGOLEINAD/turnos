@@ -184,7 +184,7 @@ export async function obtenerAlumnos(sedeId?: string) {
       .in('organizacion_id', actor.scope.organizacionesAdmin)
       .eq('activa', true)
 
-    const sedeIds = (sedes || []).map((s) => s.id)
+    const sedeIds = (sedes || []).map((s: any) => s.id)
     if (sedeIds.length === 0) return { data: [] }
     query = query.in('sede_id', sedeIds)
   }
@@ -369,7 +369,7 @@ export async function obtenerUsuariosDisponiblesParaAlumnos(sedeId: string) {
     .select('usuario_id')
     .eq('sede_id', sedeId)
 
-  const idsAlumnoEnSede = new Set((alumnos || []).map((a) => a.usuario_id).filter(Boolean))
+  const idsAlumnoEnSede = new Set((alumnos || []).map((a: any) => a.usuario_id).filter(Boolean))
 
   const { data: membresiasAlumno, error: membresiasError } = await supabase
     .from('membresias')
@@ -381,7 +381,7 @@ export async function obtenerUsuariosDisponiblesParaAlumnos(sedeId: string) {
   if (membresiasError) return { error: membresiasError.message }
 
   const idsConRolAlumno = Array.from(
-    new Set((membresiasAlumno || []).map((m) => m.usuario_id).filter(Boolean))
+    new Set((membresiasAlumno || []).map((m: any) => m.usuario_id).filter(Boolean))
   ) as string[]
 
   const idsDisponibles = idsConRolAlumno.filter((id) => !idsAlumnoEnSede.has(id))
@@ -464,7 +464,7 @@ export async function obtenerCreditosAlumno(alumnoId: string, sedeId?: string) {
       .in('organizacion_id', actor.scope.organizacionesAdmin)
       .eq('activa', true)
 
-    const sedeIds = (sedes || []).map((s) => s.id)
+    const sedeIds = (sedes || []).map((s: any) => s.id)
     if (sedeIds.length === 0) return { data: [] }
     query = query.in('sede_id', sedeIds)
   }

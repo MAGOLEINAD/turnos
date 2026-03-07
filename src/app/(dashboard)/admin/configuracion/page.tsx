@@ -55,7 +55,7 @@ export default async function AdminConfiguracionPage({ searchParams }: AdminConf
     )
   }
 
-  const sedeActual = sedesDisponibles.find((s) => s.id === sedeSeleccionada)
+  const sedeActual = sedesDisponibles.find((s: any) => s.id === sedeSeleccionada)
 
   return (
     <div>
@@ -79,7 +79,7 @@ export default async function AdminConfiguracionPage({ searchParams }: AdminConf
               className="mt-1 w-full rounded-md border px-3 py-2"
               disabled={sedesDisponibles.length <= 1}
             >
-              {sedesDisponibles.map((sede) => (
+              {sedesDisponibles.map((sede: any) => (
                 <option key={sede.id} value={sede.id}>
                   {sede.nombre}
                 </option>

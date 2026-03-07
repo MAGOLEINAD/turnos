@@ -55,13 +55,15 @@ export const FULLCALENDAR_CONFIG = {
  * Convierte una reserva a evento de FullCalendar
  */
 export function reservaToEvent(reserva: any): EventInput {
+  const colorActividad = reserva?.actividades?.color_calendario
+  const colorFinal = colorActividad || obtenerColorEvento(reserva)
   return {
     id: reserva.id,
     title: obtenerTituloEvento(reserva),
     start: reserva.fecha_inicio,
     end: reserva.fecha_fin,
-    backgroundColor: obtenerColorEvento(reserva),
-    borderColor: obtenerColorEvento(reserva),
+    backgroundColor: colorFinal,
+    borderColor: colorFinal,
     extendedProps: {
       tipo: 'reserva',
       reserva,
@@ -136,6 +138,14 @@ export function bloqueoToEvent(bloqueo: any): EventInput {
  * Obtiene el título del evento según el tipo y datos
  */
 function obtenerTituloEvento(reserva: any): string {
+  if (reserva?.actividades?.nombre) {
+    const nombre = reserva.actividades.nombre
+    if (reserva.tipo === 'grupal') {
+      return `${nombre} (${reserva.cupo_actual}/${reserva.cupo_maximo})`
+    }
+    return nombre
+  }
+
   if (reserva.tipo === 'grupal') {
     return `Grupal (${reserva.cupo_actual}/${reserva.cupo_maximo})`
   }

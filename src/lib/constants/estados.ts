@@ -7,6 +7,7 @@ export const ESTADO_RESERVA = {
   CONFIRMADA: 'confirmada',
   CANCELADA: 'cancelada',
   COMPLETADA: 'completada',
+  PRIMERA_CLASE: 'primera_clase',
 } as const
 
 export type EstadoReserva = (typeof ESTADO_RESERVA)[keyof typeof ESTADO_RESERVA]
@@ -15,6 +16,7 @@ export const ESTADO_RESERVA_LABELS: Record<EstadoReserva, string> = {
   [ESTADO_RESERVA.CONFIRMADA]: 'Confirmada',
   [ESTADO_RESERVA.CANCELADA]: 'Cancelada',
   [ESTADO_RESERVA.COMPLETADA]: 'Completada',
+  [ESTADO_RESERVA.PRIMERA_CLASE]: 'Primera clase',
 }
 
 // Estados de pago

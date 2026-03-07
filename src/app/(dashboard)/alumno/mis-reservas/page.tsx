@@ -10,6 +10,19 @@ interface AlumnoAgendaPageProps {
   }
 }
 
+interface SedeOption {
+  id: string
+  nombre: string
+}
+
+type ReservaLite = {
+  id: string
+  sede_id: string
+  fecha_inicio: string
+  fecha_fin: string
+  estado: string
+}
+
 export default async function AlumnoMisReservasPage({ searchParams }: AlumnoAgendaPageProps) {
   const usuario = await getUser()
 
@@ -27,14 +40,14 @@ export default async function AlumnoMisReservasPage({ searchParams }: AlumnoAgen
     .eq('activa', true)
     .not('sede_id', 'is', null)
 
-  const sedesPermitidas = (membresiasAlumno || [])
+  const sedesPermitidas: SedeOption[] = (membresiasAlumno || [])
     .map((m: any) => {
       const sede = Array.isArray(m.sedes) ? m.sedes[0] : m.sedes
       return m.sede_id && sede?.nombre ? { id: m.sede_id as string, nombre: sede.nombre as string } : null
     })
-    .filter((sede): sede is { id: string; nombre: string } => !!sede)
+    .filter((sede: SedeOption | null): sede is SedeOption => !!sede)
 
-  const sedesUnicas = Array.from(new Map(sedesPermitidas.map((s) => [s.id, s])).values())
+  const sedesUnicas: SedeOption[] = Array.from(new Map(sedesPermitidas.map((s: SedeOption) => [s.id, s])).values())
 
   if (sedesUnicas.length === 0) {
     return (
@@ -45,16 +58,16 @@ export default async function AlumnoMisReservasPage({ searchParams }: AlumnoAgen
   }
 
   const filtroSede = searchParams?.sede || null
-  const sedeValida = filtroSede && sedesUnicas.some((s) => s.id === filtroSede) ? filtroSede : null
+  const sedeValida = filtroSede && sedesUnicas.some((s: SedeOption) => s.id === filtroSede) ? filtroSede : null
 
   const { data: perfilesAlumno } = await supabase
     .from('alumnos')
     .select('id, sede_id')
     .eq('usuario_id', usuario.id)
     .eq('activo', true)
-    .in('sede_id', sedesUnicas.map((s) => s.id))
+    .in('sede_id', sedesUnicas.map((s: SedeOption) => s.id))
 
-  const alumnoIds = (perfilesAlumno || []).map((a) => a.id).filter(Boolean)
+  const alumnoIds = (perfilesAlumno || []).map((a: any) => a.id).filter(Boolean)
 
   const individualesQuery = supabase
     .from('reservas')
@@ -101,25 +114,25 @@ export default async function AlumnoMisReservasPage({ searchParams }: AlumnoAgen
           .in('alumno_id', alumnoIds)
       : null
 
-  const [individualesRes, grupalesRes] = await Promise.all([
+  const [individualesRes, grupalesRes]: any[] = await Promise.all([
     individualesQuery,
-    grupalesQuery ? grupalesQuery : Promise.resolve({ data: [], error: null } as any),
+    grupalesQuery ? grupalesQuery : Promise.resolve({ data: [], error: null }),
   ])
 
-  const individuales = (individualesRes.data || []).filter((r: any) =>
+  const individuales: ReservaLite[] = (individualesRes.data || []).filter((r: any) =>
     sedeValida ? r.sede_id === sedeValida : true
   )
 
-  const grupales = (grupalesRes.data || [])
+  const grupales: ReservaLite[] = (grupalesRes.data || [])
     .map((row: any) => (Array.isArray(row.reservas) ? row.reservas[0] : row.reservas))
     .filter((r: any) => !!r && r.estado === 'confirmada')
     .filter((r: any) => (sedeValida ? r.sede_id === sedeValida : true))
 
-  const reservasMap = new Map<string, any>()
+  const reservasMap = new Map<string, ReservaLite>()
   for (const reserva of [...individuales, ...grupales]) {
     reservasMap.set(reserva.id, reserva)
   }
-  const reservas = Array.from(reservasMap.values()).sort(
+  const reservas: ReservaLite[] = Array.from(reservasMap.values()).sort(
     (a, b) => new Date(a.fecha_inicio).getTime() - new Date(b.fecha_inicio).getTime()
   )
 

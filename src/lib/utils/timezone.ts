@@ -43,10 +43,11 @@ export function crearFechaArgentina(
   hour: number = 0,
   minute: number = 0
 ): Date {
-  return dayjs.tz(
-    { year, month, date: day, hour, minute },
-    TIMEZONE
-  ).toDate()
+  const mm = String(month + 1).padStart(2, '0')
+  const dd = String(day).padStart(2, '0')
+  const hh = String(hour).padStart(2, '0')
+  const min = String(minute).padStart(2, '0')
+  return dayjs.tz(`${year}-${mm}-${dd} ${hh}:${min}:00`, TIMEZONE).toDate()
 }
 
 /**

@@ -22,8 +22,8 @@ export default async function AlumnoHorariosPage() {
     .not('sede_id', 'is', null)
 
   const sedeIdsPermitidas = (membresiasAlumno || [])
-    .map((m) => m.sede_id)
-    .filter((id): id is string => !!id)
+    .map((m: any) => m.sede_id)
+    .filter((id: any): id is string => !!id)
 
   if (sedeIdsPermitidas.length === 0) {
     return (

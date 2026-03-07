@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { CalendarioFullCalendar } from './CalendarioFullCalendar'
 import { ModalInscripcionGrupal } from './ModalInscripcionGrupal'
 import type { EventClickArg } from '@fullcalendar/core'
 import { toast } from 'sonner'
-import { obtenerReservas } from '@/lib/actions/reservas.actions'
+import { useReservas } from '@/hooks/useReservas'
 import { reservaToEvent } from '@/lib/utils/calendario'
 
 interface CalendarioAlumnoProps {
@@ -15,61 +15,47 @@ interface CalendarioAlumnoProps {
 }
 
 export function CalendarioAlumno({ usuarioId, alumnoId, sedeId }: CalendarioAlumnoProps) {
-  const [eventos, setEventos] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
   // Estado para modal de inscripción
   const [modalInscripcionOpen, setModalInscripcionOpen] = useState(false)
   const [reservaSeleccionada, setReservaSeleccionada] = useState<any>(null)
 
+  // React Query maneja loading, error y caching automáticamente
+  const { data: reservas = [], isLoading, error } = useReservas(sedeId)
+
+  // Convertir reservas a eventos (memoizado para no recalcular en cada render)
+  const eventos = useMemo(() => {
+    const reservasSede = reservas.filter((r: any) => r.sede_id === sedeId)
+    return reservasSede.map(reservaToEvent)
+  }, [reservas, sedeId])
+
+  // Mostrar error si existe
   useEffect(() => {
-    cargarEventos()
-  }, [sedeId])
-
-  const cargarEventos = async () => {
-    setLoading(true)
-    try {
-      // Obtener todas las reservas de la sede (para ver disponibilidad)
-      const result = await obtenerReservas(undefined, undefined, undefined)
-
-      if (result.error) {
-        toast.error(result.error)
-        setEventos([])
-      } else if (result.data) {
-        // Filtrar por sede y convertir a eventos
-        const reservasSede = result.data.filter((r: any) => r.sede_id === sedeId)
-        const eventosConvertidos = reservasSede.map(reservaToEvent)
-        setEventos(eventosConvertidos)
-      }
-    } catch (error) {
+    if (error) {
       toast.error('Error al cargar eventos')
-      setEventos([])
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [error])
 
-  const handleEventClick = async (clickInfo: EventClickArg) => {
+  const handleEventClick = (clickInfo: EventClickArg) => {
     const reservaId = clickInfo.event.id
 
-    // Buscar la reserva completa
-    const result = await obtenerReservas()
-    if (result.data) {
-      const reserva = result.data.find((r: any) => r.id === reservaId)
-      if (reserva && reserva.tipo === 'grupal') {
-        setReservaSeleccionada(reserva)
-        setModalInscripcionOpen(true)
-      } else if (reserva && reserva.tipo === 'individual') {
-        toast.info('Esta es una clase individual. Contacta al profesor para reservar.')
-      }
+    // Los datos ya están en cache, no hace falta re-fetch
+    const reserva = reservas.find((r: any) => r.id === reservaId)
+
+    if (reserva?.tipo === 'grupal') {
+      setReservaSeleccionada(reserva)
+      setModalInscripcionOpen(true)
+    } else if (reserva?.tipo === 'individual') {
+      toast.info('Esta es una clase individual. Contacta al profesor para reservar.')
     }
   }
 
   const handleInscripcionSuccess = () => {
-    cargarEventos()
+    // React Query automáticamente refresca la data después de la mutación
+    setModalInscripcionOpen(false)
+    toast.success('Inscripción exitosa')
   }
 
-  if (loading) {
+  if (isLoading) {
     return <div className="text-center py-12">Cargando calendario...</div>
   }
 

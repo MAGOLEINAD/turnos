@@ -80,7 +80,7 @@ async function getActorPermisos(usuario: any): Promise<ActorPermisos> {
     sedesAdmin = Array.from(
       new Set([
         ...sedesAdmin,
-        ...(sedesPorOrg || []).map((s) => s.id).filter((id): id is string => !!id),
+        ...(sedesPorOrg || []).map((s: any) => s.id).filter((id: any): id is string => !!id),
       ])
     )
   }
@@ -192,7 +192,7 @@ async function canModifySedeSetForTarget(
 
   if (membershipsError) return { ok: false, error: membershipsError.message }
 
-  const rolesActivosSede = (memberships || []).map((m) => m.rol)
+  const rolesActivosSede = (memberships || []).map((m: any) => m.rol)
 
   if (input.mode === 'assign') {
     const yaTieneSede = rolesActivosSede.length > 0
@@ -204,7 +204,7 @@ async function canModifySedeSetForTarget(
         }
   }
 
-  const quedaAlgunRolEnSede = rolesActivosSede.some((rol) => rol !== input.rol)
+  const quedaAlgunRolEnSede = rolesActivosSede.some((rol: any) => rol !== input.rol)
   return quedaAlgunRolEnSede
     ? { ok: true, error: null as string | null }
     : {
@@ -251,13 +251,13 @@ export async function getUsuarios() {
         .in('created_by_organizacion_id', organizacionesAdmin)
 
       if (!createdByOrgResult.error) {
-        createdByOrgIds = (createdByOrgResult.data || []).map((u) => u.id)
+        createdByOrgIds = (createdByOrgResult.data || []).map((u: any) => u.id)
       }
 
       const userIds = Array.from(
         new Set([
           usuario.id,
-          ...((membershipsScope || []).map((m) => m.usuario_id).filter(Boolean)),
+          ...((membershipsScope || []).map((m: any) => m.usuario_id).filter(Boolean)),
           ...createdByOrgIds,
         ])
       )
@@ -459,7 +459,7 @@ export async function asignarRolUsuario(input: AsignarRolInput) {
           organizacion_id: null,
           fecha_fin: null,
         })
-        .in('id', membresiasSuperAdmin.map((m) => m.id))
+        .in('id', membresiasSuperAdmin.map((m: any) => m.id))
 
       if (activarError) {
         return { error: activarError.message }

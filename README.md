@@ -101,3 +101,132 @@ El repo esta activo y en evolucion. Para evitar desactualizacion:
 - `supabase/SQL_STRUCTURE.md` define normas de cambios SQL y migraciones.
 
 No se mantiene documentacion historica de avance por fases en archivos separados.
+
+## Plan activo: Calendario v2 (automatizacion + actividades + cobros)
+
+Ultima actualizacion: 2026-03-07
+Estado general: Pendiente de implementacion
+
+### Objetivo
+
+Implementar un calendario unificado por sede con actividades recurrentes, asignacion inteligente por rol, cobro obligatorio en reserva y actualizacion en tiempo casi real.
+
+### Definiciones funcionales cerradas
+
+- La reserva se confirma solo cuando el pago fue exitoso.
+- La reserva se confirma cuando el pago queda registrado como valido (digital o manual).
+- La clase de prueba no es gratis: se paga una sena.
+- La clase de prueba es unica: maximo 1 por alumno (global).
+- Si la reserva queda como prueba, se marca en estado `primera_clase`.
+- El alumno debe completar la cuota como maximo el dia anterior a su proxima clase.
+- La baja de horario fijo puede ser inmediata o a fin de mes (elegible en UI).
+- Si es baja a fin de mes, el cupo se mantiene ocupado hasta fin de mes.
+- Las actividades reemplazan el tipo actual `individual/grupal`.
+- `Clase individual` pasa a ser una actividad mas.
+- Un profesor puede dar solo actividades que tenga habilitadas.
+- Admin puede asignar clases a cualquier profesor de su sede.
+- Calendario publico muestra sede y actividades (sin precio en vista publica).
+- Si usuario no autenticado intenta reservar en calendario publico:
+  - debe registrarse/iniciar sesion;
+  - luego se asigna automaticamente rol `alumno` + sede del calendario;
+  - pasa por cobro para confirmar reserva.
+- Si un bloqueo pisa un horario fijo:
+  - se muestra alerta;
+  - se exige accion de resolucion;
+  - opciones: reasignar profesor, mover horario fijo, cancelar bloqueo;
+  - se registra auditoria.
+- Actividades pueden existir en multiples sedes.
+- Por default, valores iguales en todas las sedes con opcion de override por sede para:
+  - precio
+  - duracion
+  - cupo
+- Mercado Pago: primera etapa con integracion rapida (`Checkout Pro`).
+- Debe existir carga manual de pago para casos offline o excepcionales:
+  - sena o pago por transferencia
+  - sena o pago en efectivo
+  - override manual por admin/profesor autorizado
+- Todo pago manual debe guardar trazabilidad minima:
+  - quien lo registro
+  - fecha/hora
+  - medio de pago
+  - referencia/comprobante (opcional)
+  - observaciones
+- Reportes in-app requeridos: ingresos, reservas por actividad, ocupacion por sede/profesor, bajas y morosidad.
+
+### Fases de implementacion
+
+#### Fase 0 - Discovery tecnico y mapa de impacto
+- [x] Inventariar tablas/campos actuales que impactan calendario, reservas, horarios fijos, pagos y reportes.
+- [x] Definir contrato de compatibilidad con datos existentes (sin romper reservas actuales).
+- [x] Confirmar estrategia de migracion de `tipo reserva` -> `actividad`.
+
+#### Fase 1 - Modelo de datos de actividades y asignaciones
+- [x] Crear entidad `actividades` (nombre, activa, color/tag, parametros base).
+- [x] Crear relacion `profesor_actividad` por sede.
+- [x] Crear configuracion por sede para actividad (precio, duracion, cupo override).
+- [x] Crear `actividad_id` en reservas/horarios fijos y plan de backfill.
+- [x] Definir estado de reserva `primera_clase`.
+
+#### Fase 2 - Flujo de calendario y reglas de disponibilidad
+- [x] Cambiar UI de alta de reserva: seleccionar actividad (no tipo).
+- [x] Restringir selector a actividades habilitadas para el profesor.
+- [ ] Recurrentes: crear series controladas (sin expandir infinito en DB).
+- [ ] Implementar clases extras de una sola vez.
+- [x] Endurecer chequeo de conflictos: reservas + bloqueos + horarios fijos.
+
+#### Fase 3 - Gestion de conflicto bloqueo vs horario fijo
+- [x] Detectar colision al intentar guardar bloqueo.
+- [x] Mostrar modal de resolucion obligatorio con 3 caminos:
+  - [x] Reasignar profesor
+  - [x] Mover horario fijo
+  - [x] Cancelar bloqueo
+- [x] Persistir auditoria de resolucion de conflicto.
+
+#### Fase 4 - Calendario publico + alta automatica alumno
+- [ ] Mantener vista publica de disponibilidad por sede/actividad.
+- [ ] Si quiere reservar, redirigir a auth y retomar flujo post-login.
+- [ ] Auto-asignar membresia `alumno` en sede origen luego de auth.
+- [ ] Confirmar reserva solo tras pago aprobado.
+
+#### Fase 5 - Cobros Mercado Pago (MVP rapido)
+- [ ] Implementar `Checkout Pro` para reserva puntual.
+- [ ] Implementar `Checkout Pro` para sena de primera clase.
+- [ ] Permitir decision post-prueba:
+  - [ ] pagar cuota completa
+  - [ ] descontar sena de cuota
+- [ ] Bloquear futuras reservas recurrentes si no cumple regla de pago.
+- [x] Implementar registro manual de pago (admin/profesor autorizado).
+- [x] Unificar estados de pago digital y manual en una sola logica de confirmacion de reserva.
+- [ ] Mostrar historial de pagos (digitales y manuales) en ficha de alumno/reserva.
+
+#### Fase 6 - Bajas de horarios fijos y ciclo mensual
+- [ ] UI con opcion de baja inmediata o fin de mes.
+- [ ] Lógica de efectivizacion segun opcion elegida.
+- [ ] Mantener cupo tomado hasta fecha efectiva de baja.
+
+#### Fase 7 - Reportes in-app
+- [ ] Ingresos cobrados por periodo/sede/actividad.
+- [ ] Reservas por actividad y conversion de prueba -> recurrente.
+- [ ] Ocupacion por sede y profesor.
+- [ ] Bajas y churn de horarios fijos.
+- [ ] Morosidad y proximos vencimientos.
+
+#### Fase 8 - Tiempo real y performance
+- [ ] Actualizacion en tiempo casi real al reservar/cancelar/pagar.
+- [ ] Revisar estrategia de refresco (realtime vs invalidacion selectiva).
+- [ ] Asegurar que un slot reservado desaparece de disponibilidad inmediatamente.
+- [ ] Tests de concurrencia para doble reserva.
+
+### Criterios de release (minimo)
+
+- [ ] No hay doble reserva en mismo slot/cupo.
+- [ ] Reserva sin pago no se confirma.
+- [ ] Conflictos de bloqueo/fijo resueltos con accion obligatoria.
+- [ ] Flujo publico -> auth -> alta alumno -> pago -> reserva confirmado.
+- [ ] Reportes basicos operativos disponibles.
+
+### Regla de mantenimiento de este plan
+
+- Este bloque se actualiza en cada sesion de trabajo relevante.
+- Cada tarea implementada se marca como completada (`[x]`).
+- Si cambia una definicion funcional cerrada, se registra aqui primero.

@@ -6,8 +6,11 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { crearReserva } from '@/lib/actions/reservas.actions'
 import { obtenerCreditosAlumno } from '@/lib/actions/alumnos.actions'
+import {
+  obtenerActividadesDisponiblesProfesor,
+  type ActividadDisponibleProfesor,
+} from '@/lib/actions/actividades.actions'
 import { reservaSchema, type ReservaInput } from '@/lib/validations/reserva.schema'
-import { TIPO_RESERVA } from '@/lib/constants/estados'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
@@ -17,7 +20,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { formatDateTime, formatDate } from '@/lib/utils/date'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
 
@@ -43,10 +45,18 @@ export function ModalNuevaReserva({
   onSuccess,
 }: ModalNuevaReservaProps) {
   const [loading, setLoading] = useState(false)
-  const [tipoReserva, setTipoReserva] = useState<string>(TIPO_RESERVA.INDIVIDUAL)
   const [creditos, setCreditos] = useState<any[]>([])
   const [usarCredito, setUsarCredito] = useState(false)
   const [creditoSeleccionado, setCreditoSeleccionado] = useState<string>('')
+  const [actividades, setActividades] = useState<ActividadDisponibleProfesor[]>([])
+  const [actividadSeleccionada, setActividadSeleccionada] = useState<string>('')
+  const [esClasePrueba, setEsClasePrueba] = useState(false)
+  const [pagoRegistrado, setPagoRegistrado] = useState(!alumnoId)
+  const [origenPagoManual, setOrigenPagoManual] = useState<
+    'transferencia' | 'efectivo' | 'manual_override'
+  >('manual_override')
+  const [montoPagoManual, setMontoPagoManual] = useState<number>(0)
+  const [referenciaPagoManual, setReferenciaPagoManual] = useState('')
 
   const {
     register,
@@ -59,83 +69,97 @@ export function ModalNuevaReserva({
     defaultValues: {
       sede_id: sedeId,
       profesor_id: profesorId,
-      tipo: TIPO_RESERVA.INDIVIDUAL,
+      alumno_id: alumnoId,
       fecha_inicio: fechaInicio.toISOString(),
       fecha_fin: fechaFin.toISOString(),
+      pago_registrado: !alumnoId,
     },
   })
 
+  const actividadActual = actividades.find((a) => a.id === actividadSeleccionada)
+
+  const cargarActividades = useCallback(async () => {
+    const result = await obtenerActividadesDisponiblesProfesor(profesorId, sedeId)
+    if (result.error) {
+      toast.error(result.error)
+      setActividades([])
+      return
+    }
+    const data = result.data || []
+    setActividades(data)
+    if (data.length > 0) {
+      setActividadSeleccionada(data[0].id)
+      setValue('actividad_id', data[0].id)
+      setMontoPagoManual(data[0].precio_clase)
+    }
+  }, [profesorId, sedeId, setValue])
+
   const cargarCreditos = useCallback(async () => {
     if (!alumnoId) return
-
-    try {
-      const result = await obtenerCreditosAlumno(alumnoId, sedeId)
-      if (result.data) {
-        setCreditos(result.data)
-        if (result.data.length > 0) {
-          setCreditoSeleccionado(result.data[0].id)
-        }
-      }
-    } catch (error) {
-      console.error('Error al cargar créditos:', error)
+    const result = await obtenerCreditosAlumno(alumnoId, sedeId)
+    if (result.data) {
+      setCreditos(result.data)
+      if (result.data.length > 0) setCreditoSeleccionado(result.data[0].id)
     }
   }, [alumnoId, sedeId])
 
   useEffect(() => {
-    if (open && alumnoId) {
-      cargarCreditos()
-    }
-  }, [open, alumnoId, cargarCreditos])
+    if (!open) return
+    cargarActividades()
+    if (alumnoId) cargarCreditos()
+  }, [open, alumnoId, cargarActividades, cargarCreditos])
 
-  const onSubmit = async (data: ReservaInput) => {
+  useEffect(() => {
+    if (!actividadActual) return
+    setMontoPagoManual(actividadActual.precio_clase)
+    setValue('cupo_maximo', actividadActual.cupo_maximo)
+  }, [actividadActual, setValue])
+
+  const onSubmit = async (form: ReservaInput) => {
     setLoading(true)
     try {
       const result = await crearReserva({
-        ...data,
+        ...form,
+        sede_id: sedeId,
+        profesor_id: profesorId,
+        alumno_id: alumnoId,
+        actividad_id: actividadSeleccionada,
         fecha_inicio: fechaInicio.toISOString(),
         fecha_fin: fechaFin.toISOString(),
+        es_clase_prueba: esClasePrueba,
+        pago_registrado: pagoRegistrado || !alumnoId,
         usar_credito: usarCredito,
         credito_id: usarCredito ? creditoSeleccionado : undefined,
+        origen_pago_manual: pagoRegistrado ? origenPagoManual : undefined,
+        monto_pago_manual: pagoRegistrado ? montoPagoManual : undefined,
+        referencia_pago_manual: pagoRegistrado ? referenciaPagoManual : undefined,
       })
 
       if (result.error) {
         toast.error(result.error)
-      } else {
-        const mensaje = result.creditoUsado
-          ? 'Reserva creada exitosamente usando crédito'
-          : 'Reserva creada exitosamente'
-        toast.success(mensaje)
-        reset()
-        onOpenChange(false)
-        onSuccess?.()
+        return
       }
-    } catch (error) {
+
+      toast.success(usarCredito ? 'Reserva creada con crédito' : 'Reserva creada exitosamente')
+      reset()
+      onOpenChange(false)
+      onSuccess?.()
+    } catch {
       toast.error('Error al crear la reserva')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleTipoChange = (value: string) => {
-    setTipoReserva(value)
-    setValue('tipo', value as any)
-    if (value === TIPO_RESERVA.INDIVIDUAL) {
-      setValue('cupo_maximo', undefined)
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Nueva Reserva</DialogTitle>
-          <DialogDescription>
-            Configura los datos de la reserva para el horario seleccionado.
-          </DialogDescription>
+          <DialogDescription>Selecciona actividad y confirma el pago para reservar.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Información de fecha/hora */}
           <div className="bg-muted/50 p-3 rounded-md">
             <p className="text-sm font-medium">Horario seleccionado</p>
             <p className="text-sm text-muted-foreground">
@@ -143,80 +167,90 @@ export function ModalNuevaReserva({
             </p>
           </div>
 
-          {/* Tipo de reserva */}
           <div className="space-y-2">
-            <Label htmlFor="tipo">Tipo de Reserva</Label>
-            <Select value={tipoReserva} onValueChange={handleTipoChange}>
+            <Label>Actividad *</Label>
+            <Select
+              value={actividadSeleccionada}
+              onValueChange={(value) => {
+                setActividadSeleccionada(value)
+                setValue('actividad_id', value)
+              }}
+            >
               <SelectTrigger>
-                <SelectValue placeholder="Selecciona el tipo" />
+                <SelectValue placeholder="Selecciona actividad" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={TIPO_RESERVA.INDIVIDUAL}>Individual</SelectItem>
-                <SelectItem value={TIPO_RESERVA.GRUPAL}>Grupal</SelectItem>
+                {actividades.map((actividad) => (
+                  <SelectItem key={actividad.id} value={actividad.id}>
+                    {actividad.nombre}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            {errors.tipo && (
-              <p className="text-sm text-destructive">{errors.tipo.message}</p>
+            {errors.actividad_id && (
+              <p className="text-sm text-destructive">{errors.actividad_id.message}</p>
             )}
           </div>
 
-          {/* Cupo máximo (solo para grupales) */}
-          {tipoReserva === TIPO_RESERVA.GRUPAL && (
-            <div className="space-y-2">
-              <Label htmlFor="cupo_maximo">Cupo Máximo de Alumnos</Label>
-              <Input
-                id="cupo_maximo"
-                type="number"
-                min={2}
-                max={20}
-                defaultValue={4}
-                {...register('cupo_maximo', { valueAsNumber: true })}
-              />
-              {errors.cupo_maximo && (
-                <p className="text-sm text-destructive">{errors.cupo_maximo.message}</p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Los alumnos podrán inscribirse a esta clase grupal
-              </p>
+          {actividadActual ? (
+            <div className="grid grid-cols-3 gap-3 rounded-md border p-3 text-sm">
+              <div>
+                <p className="text-muted-foreground">Duración</p>
+                <p className="font-medium">{actividadActual.duracion_minutos} min</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Cupo</p>
+                <p className="font-medium">{actividadActual.cupo_maximo}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Precio</p>
+                <p className="font-medium">${actividadActual.precio_clase}</p>
+              </div>
             </div>
-          )}
+          ) : null}
 
-          {/* Notas */}
           <div className="space-y-2">
             <Label htmlFor="notas">Notas (opcional)</Label>
             <Textarea
               id="notas"
-              placeholder="Información adicional sobre la reserva..."
+              placeholder="Información adicional..."
               rows={3}
               {...register('notas')}
             />
-            {errors.notas && (
-              <p className="text-sm text-destructive">{errors.notas.message}</p>
-            )}
+            {errors.notas && <p className="text-sm text-destructive">{errors.notas.message}</p>}
           </div>
 
-          {/* Créditos Disponibles (solo si es alumno) */}
-          {alumnoId && creditos.length > 0 && (
+          {alumnoId && actividadActual?.permite_prueba ? (
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <Label htmlFor="es_clase_prueba" className="text-base">
+                  Primera clase (seña)
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Marca esta reserva como prueba paga.
+                </p>
+              </div>
+              <Switch id="es_clase_prueba" checked={esClasePrueba} onCheckedChange={setEsClasePrueba} />
+            </div>
+          ) : null}
+
+          {alumnoId && creditos.length > 0 ? (
             <div className="space-y-3 pt-2 border-t">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="usar_credito" className="text-base">
-                    Usar Crédito de Recupero
+                    Usar crédito de recupero
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Tienes {creditos.length} {creditos.length === 1 ? 'crédito disponible' : 'créditos disponibles'}
+                    Tienes {creditos.length} créditos disponibles
                   </p>
                 </div>
-                <Switch
-                  id="usar_credito"
-                  checked={usarCredito}
-                  onCheckedChange={setUsarCredito}
-                />
+                <Switch id="usar_credito" checked={usarCredito} onCheckedChange={setUsarCredito} />
               </div>
 
-              {usarCredito && (
+              {usarCredito ? (
                 <div className="space-y-2">
-                  <Label htmlFor="credito_seleccionado">Selecciona un Crédito</Label>
+                  <Label>Selecciona un crédito</Label>
                   <Select value={creditoSeleccionado} onValueChange={setCreditoSeleccionado}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecciona un crédito" />
@@ -224,49 +258,91 @@ export function ModalNuevaReserva({
                     <SelectContent>
                       {creditos.map((credito) => (
                         <SelectItem key={credito.id} value={credito.id}>
-                          Crédito del {formatDate(new Date(credito.fecha_generacion))} -
-                          Expira {formatDate(new Date(credito.fecha_expiracion))}
+                          Crédito del {formatDate(new Date(credito.fecha_generacion))}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Alert className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
-                    <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <AlertDescription className="text-green-800 dark:text-green-300">
-                      Esta reserva será gratis usando tu crédito de recupero
-                    </AlertDescription>
+                  <Alert>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <AlertDescription>Esta reserva quedará cubierta con crédito.</AlertDescription>
                   </Alert>
                 </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {alumnoId && !usarCredito ? (
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="pago_registrado">Pago registrado</Label>
+                  <p className="text-sm text-muted-foreground">
+                    La reserva se confirma solo con pago registrado.
+                  </p>
+                </div>
+                <Switch id="pago_registrado" checked={pagoRegistrado} onCheckedChange={setPagoRegistrado} />
+              </div>
+
+              {pagoRegistrado ? (
+                <>
+                  <div className="space-y-2">
+                    <Label>Medio de pago</Label>
+                    <Select
+                      value={origenPagoManual}
+                      onValueChange={(value) =>
+                        setOrigenPagoManual(value as 'transferencia' | 'efectivo' | 'manual_override')
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="transferencia">Transferencia</SelectItem>
+                        <SelectItem value="efectivo">Efectivo</SelectItem>
+                        <SelectItem value="manual_override">Override manual</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="monto_pago">Monto</Label>
+                    <Input
+                      id="monto_pago"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={montoPagoManual}
+                      onChange={(e) => setMontoPagoManual(Number(e.target.value))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="referencia_pago">Referencia/comprobante</Label>
+                    <Input
+                      id="referencia_pago"
+                      value={referenciaPagoManual}
+                      onChange={(e) => setReferenciaPagoManual(e.target.value)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Sin pago registrado no se podrá confirmar esta reserva.
+                  </AlertDescription>
+                </Alert>
               )}
             </div>
-          )}
+          ) : null}
 
-          {/* Mensaje si no hay créditos */}
-          {alumnoId && creditos.length === 0 && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                No tienes créditos disponibles. Los créditos se generan al cancelar con anticipación.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Botones */}
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <LoadingButton
-              type="submit"
-              loading={loading}
-              loadingText={usarCredito ? 'Reservando con credito...' : 'Creando reserva...'}
-            >
-              {usarCredito ? 'Reservar con credito' : 'Crear reserva'}
+            <LoadingButton type="submit" loading={loading} loadingText="Guardando reserva...">
+              Confirmar reserva
             </LoadingButton>
           </div>
         </form>
@@ -274,4 +350,3 @@ export function ModalNuevaReserva({
     </Dialog>
   )
 }
-

@@ -9,6 +9,11 @@ import {
   actualizarProfesor,
   obtenerUsuariosDisponibles,
 } from '@/lib/actions/profesores.actions'
+import {
+  asignarActividadesProfesor,
+  obtenerActividadIdsProfesor,
+  obtenerActividadesPorSede,
+} from '@/lib/actions/actividades.actions'
 import { profesorSchema, type ProfesorInput } from '@/lib/validations/profesor.schema'
 import { TIPO_AUTORIZACION_PROFESOR, TIPO_AUTORIZACION_PROFESOR_LABELS } from '@/lib/constants/estados'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -18,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { MultiSelect, type MultiSelectOption } from '@/components/ui/multi-select'
 
 interface FormProfesorProps {
   open: boolean
@@ -37,6 +43,8 @@ export function FormProfesor({
   const [loading, setLoading] = useState(false)
   const [usuarios, setUsuarios] = useState<any[]>([])
   const [loadingUsuarios, setLoadingUsuarios] = useState(true)
+  const [actividadesOptions, setActividadesOptions] = useState<MultiSelectOption[]>([])
+  const [actividadesSeleccionadas, setActividadesSeleccionadas] = useState<string[]>([])
 
   const isEdit = !!profesor
 
@@ -85,11 +93,42 @@ export function FormProfesor({
     }
   }, [isEdit, sedeId])
 
+  const cargarActividades = useCallback(async () => {
+    const targetSede = isEdit ? profesor?.sede_id : sedeId
+    if (!targetSede) return
+
+    const actividadesResult = await obtenerActividadesPorSede(targetSede)
+    if (actividadesResult.error) {
+      toast.error(actividadesResult.error)
+      setActividadesOptions([])
+      return
+    }
+
+    setActividadesOptions(
+      (actividadesResult.data || []).map((a) => ({
+        value: a.id,
+        label: a.nombre,
+      }))
+    )
+
+    if (isEdit && profesor?.id) {
+      const currentResult = await obtenerActividadIdsProfesor(profesor.id)
+      if (currentResult.data) {
+        setActividadesSeleccionadas(currentResult.data)
+      }
+    }
+  }, [isEdit, profesor, sedeId])
+
   useEffect(() => {
     if (open && !isEdit) {
       cargarUsuariosDisponibles()
     }
   }, [open, isEdit, cargarUsuariosDisponibles])
+
+  useEffect(() => {
+    if (!open) return
+    cargarActividades()
+  }, [open, cargarActividades])
 
   useEffect(() => {
     if (!open) return
@@ -100,15 +139,30 @@ export function FormProfesor({
     }
 
     setValue('sede_id', sedeId)
+    setActividadesSeleccionadas([])
   }, [open, isEdit, profesor, sedeId, setValue])
 
   const onSubmit = async (data: ProfesorInput) => {
     setLoading(true)
     try {
+      if (actividadesSeleccionadas.length === 0) {
+        toast.error('Selecciona al menos una actividad para el profesor.')
+        return
+      }
+
       if (isEdit) {
         const result = await actualizarProfesor(profesor.id, data)
         if (result.error) {
           toast.error(result.error)
+          return
+        }
+
+        const actividadesResult = await asignarActividadesProfesor(
+          profesor.id,
+          actividadesSeleccionadas
+        )
+        if (actividadesResult.error) {
+          toast.error(actividadesResult.error)
           return
         }
 
@@ -127,6 +181,17 @@ export function FormProfesor({
       if (result.error) {
         toast.error(result.error)
         return
+      }
+
+      if (result.data?.id) {
+        const actividadesResult = await asignarActividadesProfesor(
+          result.data.id,
+          actividadesSeleccionadas
+        )
+        if (actividadesResult.error) {
+          toast.error(actividadesResult.error)
+          return
+        }
       }
 
       toast.success('Profesor creado exitosamente')
@@ -266,6 +331,21 @@ export function FormProfesor({
             )}
             <p className="text-xs text-muted-foreground">
               Color que identificara las clases de este profesor en el calendario
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Actividades que puede dictar</Label>
+            <MultiSelect
+              options={actividadesOptions}
+              value={actividadesSeleccionadas}
+              onChange={setActividadesSeleccionadas}
+              placeholder="Seleccionar actividades"
+              searchPlaceholder="Buscar actividad..."
+              emptyText="No hay actividades disponibles"
+            />
+            <p className="text-xs text-muted-foreground">
+              El profesor solo podrá crear reservas con las actividades seleccionadas.
             </p>
           </div>
 

@@ -36,11 +36,11 @@ export default async function AdminProfesoresPage({ searchParams }: AdminProfeso
 
   const sedesDisponibles = ctx.sedes
   // Si no hay parámetro sede, obtener profesores de todas las sedes
-  const sedeSeleccionada = searchParams?.sede || null
+  const sedeSeleccionada = searchParams?.sede
 
   const result = sedeSeleccionada
     ? await obtenerProfesores(sedeSeleccionada)
-    : await obtenerProfesores(null) // null = todas las sedes del admin
+    : await obtenerProfesores() // sin sede = todas las sedes del admin
 
   if (result.error) {
     return (
@@ -60,13 +60,13 @@ export default async function AdminProfesoresPage({ searchParams }: AdminProfeso
           </p>
         </div>
 
-        <SedeContextSelector sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada} />
+        <SedeContextSelector sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada ?? null} />
       </div>
 
       <ProfesoresList
         profesores={result.data || []}
         sedeId={sedeSeleccionada || sedesDisponibles[0]?.id}
-        sedes={sedesDisponibles.map((sede) => ({ id: sede.id, nombre: sede.nombre }))}
+        sedes={sedesDisponibles.map((sede: any) => ({ id: sede.id, nombre: sede.nombre }))}
       />
     </div>
   )

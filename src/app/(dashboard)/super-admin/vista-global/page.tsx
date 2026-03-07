@@ -28,7 +28,7 @@ export default async function VistaGlobalPage({ searchParams }: VistaGlobalPageP
 
   const sedesList = sedes || []
   const sedeSeleccionada = searchParams?.sede || sedesList[0]?.id || ''
-  const sedeActual = sedesList.find((s) => s.id === sedeSeleccionada)
+  const sedeActual = sedesList.find((s: any) => s.id === sedeSeleccionada)
   const sedeActualOrganizacion = Array.isArray(sedeActual?.organizaciones)
     ? sedeActual?.organizaciones[0]
     : sedeActual?.organizaciones

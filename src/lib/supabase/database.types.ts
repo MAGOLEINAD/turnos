@@ -112,7 +112,7 @@ export interface Database {
     Enums: {
       rol_usuario: 'super_admin' | 'admin' | 'profesor' | 'alumno'
       tipo_reserva: 'individual' | 'grupal'
-      estado_reserva: 'confirmada' | 'cancelada' | 'completada'
+      estado_reserva: 'confirmada' | 'cancelada' | 'completada' | 'primera_clase'
       estado_pago: 'pendiente' | 'aprobado' | 'rechazado' | 'cancelado' | 'reembolsado'
       tipo_autorizacion_profesor: 'solo_individual' | 'solo_grupal' | 'ambas'
       frecuencia_horario: 'semanal_1' | 'semanal_2' | 'semanal_3'

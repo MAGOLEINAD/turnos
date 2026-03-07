@@ -183,7 +183,7 @@ export async function obtenerProfesores(sedeId?: string) {
       .in('organizacion_id', actor.scope.organizacionesAdmin)
       .eq('activa', true)
 
-    const sedeIds = (sedes || []).map((s) => s.id)
+    const sedeIds = (sedes || []).map((s: any) => s.id)
     if (sedeIds.length === 0) return { data: [] }
     query = query.in('sede_id', sedeIds)
   }

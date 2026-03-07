@@ -20,6 +20,7 @@ export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
 
   useEffect(() => {
     cargarCreditos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alumnoId, sedeId])
 
   const cargarCreditos = async () => {
