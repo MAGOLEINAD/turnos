@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils/cn'
 export interface MultiSelectOption {
   value: string
   label: string
+  disabled?: boolean
 }
 
 interface MultiSelectProps {
@@ -18,6 +19,9 @@ interface MultiSelectProps {
   value: string[]
   onChange: (nextValue: string[]) => void
   placeholder?: string
+  searchable?: boolean
+  compactSummary?: boolean
+  showBadges?: boolean
   searchPlaceholder?: string
   emptyText?: string
   maxSelections?: number
@@ -29,6 +33,9 @@ export function MultiSelect({
   value,
   onChange,
   placeholder = 'Seleccionar...',
+  searchable = true,
+  compactSummary = false,
+  showBadges = true,
   searchPlaceholder = 'Buscar...',
   emptyText = 'Sin resultados',
   maxSelections,
@@ -69,7 +76,9 @@ export function MultiSelect({
           >
             <span className={cn('truncate', value.length === 0 && 'text-muted-foreground')}>
               {value.length > 0
-                ? selectedOptions.map((option) => option.label).join(', ')
+                ? compactSummary
+                  ? `${selectedOptions.length} ${selectedOptions.length === 1 ? 'seleccionada' : 'seleccionadas'}`
+                  : selectedOptions.map((option) => option.label).join(', ')
                 : placeholder}
             </span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
@@ -77,23 +86,24 @@ export function MultiSelect({
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
           <Command>
-            <CommandInput placeholder={searchPlaceholder} />
+            {searchable ? <CommandInput placeholder={searchPlaceholder} /> : null}
             <CommandList>
               <CommandEmpty>{emptyText}</CommandEmpty>
               <CommandGroup>
                 {options.map((option) => {
                   const checked = value.includes(option.value)
                   const atLimit = !!maxSelections && value.length >= maxSelections && !checked
+                  const isDisabled = !!option.disabled || atLimit
 
                   return (
                     <CommandItem
                       key={option.value}
                       value={option.label}
                       onSelect={() => {
-                        if (atLimit) return
+                        if (isDisabled) return
                         handleToggle(option.value)
                       }}
-                      className={cn(atLimit && 'opacity-50')}
+                      className={cn(isDisabled && 'opacity-50')}
                     >
                       <span>{option.label}</span>
                       {checked && <Check className="ml-auto h-4 w-4 text-primary" />}
@@ -106,7 +116,7 @@ export function MultiSelect({
         </PopoverContent>
       </Popover>
 
-      {selectedOptions.length > 0 && (
+      {showBadges && selectedOptions.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {selectedOptions.map((option) => (
             <Badge key={option.value} variant="secondary">

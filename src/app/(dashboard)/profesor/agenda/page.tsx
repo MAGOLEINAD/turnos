@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/actions/auth.actions'
-import { createServiceRoleClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { CalendarioProfesorAgenda } from '@/components/calendario/CalendarioProfesorAgenda'
 
 export default async function ProfesorAgendaPage() {
@@ -10,7 +10,29 @@ export default async function ProfesorAgendaPage() {
     redirect('/login')
   }
 
-  const supabase = createServiceRoleClient()
+  const supabase = await createClient()
+  const { data: membresiasProfesor } = await supabase
+    .from('membresias')
+    .select('sede_id')
+    .eq('usuario_id', usuario.id)
+    .eq('rol', 'profesor')
+    .eq('activa', true)
+    .not('sede_id', 'is', null)
+
+  const sedeIdsPermitidas = (membresiasProfesor || [])
+    .map((m) => m.sede_id)
+    .filter((id): id is string => !!id)
+
+  if (sedeIdsPermitidas.length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-muted-foreground">
+          No tienes accesos activos de profesor. Contacta al administrador.
+        </p>
+      </div>
+    )
+  }
+
   const { data: perfilesProfesor } = await supabase
     .from('profesores')
     .select(
@@ -25,6 +47,7 @@ export default async function ProfesorAgendaPage() {
     )
     .eq('usuario_id', usuario.id)
     .eq('activo', true)
+    .in('sede_id', sedeIdsPermitidas)
     .order('created_at', { ascending: true })
 
   if (!perfilesProfesor || perfilesProfesor.length === 0) {

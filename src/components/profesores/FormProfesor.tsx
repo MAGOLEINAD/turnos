@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import {
   crearProfesor,
   actualizarProfesor,
-  obtenerUsuariosDisponiblesPorSedes,
+  obtenerUsuariosDisponibles,
 } from '@/lib/actions/profesores.actions'
 import { profesorSchema, type ProfesorInput } from '@/lib/validations/profesor.schema'
 import { TIPO_AUTORIZACION_PROFESOR, TIPO_AUTORIZACION_PROFESOR_LABELS } from '@/lib/constants/estados'
@@ -24,7 +24,6 @@ interface FormProfesorProps {
   onOpenChange: (open: boolean) => void
   profesor?: any
   sedeId: string
-  sedes: Array<{ id: string; nombre: string }>
   onSuccess?: () => void
 }
 
@@ -33,14 +32,11 @@ export function FormProfesor({
   onOpenChange,
   profesor,
   sedeId,
-  sedes,
   onSuccess,
 }: FormProfesorProps) {
   const [loading, setLoading] = useState(false)
   const [usuarios, setUsuarios] = useState<any[]>([])
   const [loadingUsuarios, setLoadingUsuarios] = useState(true)
-  const [modoAsignacionSede, setModoAsignacionSede] = useState<'una' | 'todas'>('una')
-  const [sedeAsignadaId, setSedeAsignadaId] = useState(profesor?.sede_id || sedeId)
 
   const isEdit = !!profesor
 
@@ -71,33 +67,23 @@ export function FormProfesor({
         },
   })
 
-  const sedesObjetivo = useMemo(
-    () => (modoAsignacionSede === 'todas' ? sedes.map((sede) => sede.id) : [sedeAsignadaId]),
-    [modoAsignacionSede, sedes, sedeAsignadaId]
-  )
-
   const cargarUsuariosDisponibles = useCallback(async () => {
     if (isEdit) return
 
-    const sedesValidas = sedesObjetivo.filter(Boolean)
-    if (sedesValidas.length === 0) {
-      setUsuarios([])
-      setLoadingUsuarios(false)
-      return
-    }
-
     setLoadingUsuarios(true)
     try {
-      const result = await obtenerUsuariosDisponiblesPorSedes(sedesValidas)
+      const result = await obtenerUsuariosDisponibles(sedeId)
       if (result.data) {
         setUsuarios(result.data)
+      } else {
+        setUsuarios([])
       }
-    } catch (error) {
+    } catch {
       toast.error('Error al cargar usuarios')
     } finally {
       setLoadingUsuarios(false)
     }
-  }, [isEdit, sedesObjetivo])
+  }, [isEdit, sedeId])
 
   useEffect(() => {
     if (open && !isEdit) {
@@ -106,23 +92,15 @@ export function FormProfesor({
   }, [open, isEdit, cargarUsuariosDisponibles])
 
   useEffect(() => {
-    if (!isEdit) {
-      setValue('sede_id', sedeAsignadaId)
-    }
-  }, [isEdit, sedeAsignadaId, setValue])
-
-  useEffect(() => {
     if (!open) return
 
     if (isEdit) {
-      setModoAsignacionSede('una')
-      setSedeAsignadaId(profesor.sede_id)
+      setValue('sede_id', profesor.sede_id)
       return
     }
 
-    setModoAsignacionSede('una')
-    setSedeAsignadaId(sedeId)
-  }, [open, isEdit, profesor, sedeId])
+    setValue('sede_id', sedeId)
+  }, [open, isEdit, profesor, sedeId, setValue])
 
   const onSubmit = async (data: ProfesorInput) => {
     setLoading(true)
@@ -141,39 +119,21 @@ export function FormProfesor({
         return
       }
 
-      let creados = 0
-      const errores: string[] = []
+      const result = await crearProfesor({
+        ...data,
+        sede_id: sedeId,
+      })
 
-      for (const sedeDestino of sedesObjetivo.filter(Boolean)) {
-        const result = await crearProfesor({
-          ...data,
-          sede_id: sedeDestino,
-        })
-
-        if (result.error) {
-          errores.push(result.error)
-        } else {
-          creados += 1
-        }
-      }
-
-      if (creados === 0) {
-        toast.error(errores[0] || 'No se pudo crear el profesor')
+      if (result.error) {
+        toast.error(result.error)
         return
       }
 
-      toast.success(
-        creados === 1 ? 'Profesor creado exitosamente' : `Profesor creado en ${creados} sedes`
-      )
-
-      if (errores.length > 0) {
-        toast.warning(`Se omitieron ${errores.length} sedes por conflicto o permisos.`)
-      }
-
+      toast.success('Profesor creado exitosamente')
       reset()
       onOpenChange(false)
       onSuccess?.()
-    } catch (error) {
+    } catch {
       toast.error('Error al guardar el profesor')
     } finally {
       setLoading(false)
@@ -188,7 +148,7 @@ export function FormProfesor({
           <DialogDescription>
             {isEdit
               ? 'Actualiza la configuracion y permisos del profesor.'
-              : 'Completa los datos para registrar un nuevo profesor en la sede.'}
+              : 'Completa los datos para registrar un nuevo profesor en la sede seleccionada.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -200,7 +160,7 @@ export function FormProfesor({
                 <p className="text-sm text-muted-foreground">Cargando usuarios...</p>
               ) : usuarios.length === 0 ? (
                 <p className="text-sm text-orange-600">
-                  No hay usuarios con rol profesor disponibles para la asignacion seleccionada.
+                  No hay usuarios con rol profesor disponibles para esta sede.
                 </p>
               ) : (
                 <Select
@@ -256,52 +216,19 @@ export function FormProfesor({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="sede_asignacion">Asignacion de Sede *</Label>
-              <Select
-                value={modoAsignacionSede === 'todas' ? 'all' : sedeAsignadaId}
-                onValueChange={(value) => {
-                  if (value === 'all') {
-                    setModoAsignacionSede('todas')
-                    return
-                  }
-                  setModoAsignacionSede('una')
-                  setSedeAsignadaId(value)
-                }}
-                disabled={isEdit}
-              >
-                <SelectTrigger id="sede_asignacion">
-                  <SelectValue placeholder="Selecciona una sede" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sedes.length > 1 && <SelectItem value="all">Todas las sedes</SelectItem>}
-                  {sedes.map((sede) => (
-                    <SelectItem key={sede.id} value={sede.id}>
-                      {sede.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {isEdit
-                  ? 'La sede se define al registrar profesor.'
-                  : modoAsignacionSede === 'todas'
-                    ? 'Se creara este profesor en todas las sedes disponibles.'
-                    : 'Se creara este profesor solo en la sede seleccionada.'}
-              </p>
+              <Label htmlFor="especialidad">Especialidad</Label>
+              <Input
+                id="especialidad"
+                placeholder="Ej: Tenis, Pilates, Yoga..."
+                {...register('especialidad')}
+              />
+              {errors.especialidad && (
+                <p className="text-sm text-destructive">{errors.especialidad.message}</p>
+              )}
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="especialidad">Especialidad</Label>
-            <Input
-              id="especialidad"
-              placeholder="Ej: Tenis, Pilates, Yoga..."
-              {...register('especialidad')}
-            />
-            {errors.especialidad && (
-              <p className="text-sm text-destructive">{errors.especialidad.message}</p>
-            )}
-          </div>
+          <input type="hidden" {...register('sede_id')} value={isEdit ? watch('sede_id') : sedeId} />
 
           {isEdit && (
             <div className="space-y-2">

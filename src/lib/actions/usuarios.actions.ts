@@ -30,9 +30,11 @@ interface CrearUsuarioInput {
 }
 
 type ActorPermisos = {
+  usuarioId: string
   esSuperAdmin: boolean
   esAdmin: boolean
   organizacionesAdmin: string[]
+  organizacionesOwner: string[]
   sedesAdmin: string[]
 }
 
@@ -57,8 +59,11 @@ async function getActorPermisos(usuario: any): Promise<ActorPermisos> {
     .select('id')
     .eq('admin_usuario_id', usuario.id)
 
+  const organizacionesOwner = new Set<string>()
   for (const org of orgsComoAdminUsuario || []) {
-    if (org.id) organizacionesAdmin.add(org.id)
+    if (!org.id) continue
+    organizacionesAdmin.add(org.id)
+    organizacionesOwner.add(org.id)
   }
 
   const organizacionesAdminArray = Array.from(organizacionesAdmin)
@@ -81,11 +86,19 @@ async function getActorPermisos(usuario: any): Promise<ActorPermisos> {
   }
 
   return {
+    usuarioId: usuario.id,
     esSuperAdmin,
     esAdmin: organizacionesAdminArray.length > 0 || sedesAdmin.length > 0,
     organizacionesAdmin: organizacionesAdminArray,
+    organizacionesOwner: Array.from(organizacionesOwner),
     sedesAdmin,
   }
+}
+
+function esOwnerDeOrganizacion(permisos: ActorPermisos, organizacionId: string | null | undefined) {
+  if (!organizacionId) return false
+  if (permisos.esSuperAdmin) return true
+  return permisos.organizacionesOwner.includes(organizacionId)
 }
 
 function getActorPrimaryOrganizacion(permisos: ActorPermisos): string | null {
@@ -125,6 +138,79 @@ async function upsertUsuarioPerfil(
   }
 
   return scopedResult
+}
+
+async function getSedesLock(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  usuarioId: string,
+  organizacionId: string
+) {
+  const { data, error } = await supabase
+    .from('usuarios_control_acceso')
+    .select('bloquear_sedes_otros_admins')
+    .eq('usuario_id', usuarioId)
+    .eq('organizacion_id', organizacionId)
+    .single()
+
+  if (error) {
+    // Tabla aun no migrada o fila inexistente.
+    if (error.code === 'PGRST116' || error.code === '42P01') {
+      return { bloqueado: false, error: null as string | null }
+    }
+    return { bloqueado: false, error: error.message }
+  }
+
+  return { bloqueado: !!data?.bloquear_sedes_otros_admins, error: null as string | null }
+}
+
+async function canModifySedeSetForTarget(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  permisos: ActorPermisos,
+  input: {
+    usuarioId: string
+    organizacionId: string
+    sedeId: string
+    rol: 'admin' | 'profesor' | 'alumno'
+    mode: 'assign' | 'remove'
+  }
+) {
+  if (permisos.esSuperAdmin) return { ok: true, error: null as string | null }
+  if (esOwnerDeOrganizacion(permisos, input.organizacionId)) {
+    return { ok: true, error: null as string | null }
+  }
+
+  const lock = await getSedesLock(supabase, input.usuarioId, input.organizacionId)
+  if (lock.error) return { ok: false, error: lock.error }
+  if (!lock.bloqueado) return { ok: true, error: null as string | null }
+
+  const { data: memberships, error: membershipsError } = await supabase
+    .from('membresias')
+    .select('rol')
+    .eq('usuario_id', input.usuarioId)
+    .eq('sede_id', input.sedeId)
+    .eq('activa', true)
+
+  if (membershipsError) return { ok: false, error: membershipsError.message }
+
+  const rolesActivosSede = (memberships || []).map((m) => m.rol)
+
+  if (input.mode === 'assign') {
+    const yaTieneSede = rolesActivosSede.length > 0
+    return yaTieneSede
+      ? { ok: true, error: null as string | null }
+      : {
+          ok: false,
+          error: 'No autorizado para agregar sedes en este usuario. Solo el admin dueño del cliente puede hacerlo.',
+        }
+  }
+
+  const quedaAlgunRolEnSede = rolesActivosSede.some((rol) => rol !== input.rol)
+  return quedaAlgunRolEnSede
+    ? { ok: true, error: null as string | null }
+    : {
+        ok: false,
+        error: 'No autorizado para quitar sedes de este usuario. Solo el admin dueño del cliente puede hacerlo.',
+      }
 }
 
 export async function getUsuarios() {
@@ -266,6 +352,62 @@ export async function getSedesParaAsignacion() {
   return { data: data || [], error: null }
 }
 
+export async function obtenerConfigAccesoUsuario(input: { usuarioId: string; organizacionId: string }) {
+  const usuario = await getUser()
+  if (!usuario) return { error: 'No autenticado' }
+
+  const permisos = await getActorPermisos(usuario)
+  const puedeVer = permisos.esSuperAdmin || permisos.organizacionesAdmin.includes(input.organizacionId)
+  if (!puedeVer) return { error: 'No autorizado para ver esta configuracion.' }
+
+  const supabase = createServiceRoleClient()
+  const lock = await getSedesLock(supabase, input.usuarioId, input.organizacionId)
+  if (lock.error) return { error: lock.error }
+
+  return {
+    data: {
+      bloquearSedesOtrosAdmins: lock.bloqueado,
+      puedeEditarBloqueo: permisos.esSuperAdmin || esOwnerDeOrganizacion(permisos, input.organizacionId),
+      puedeAsignarAdmin: permisos.esSuperAdmin || esOwnerDeOrganizacion(permisos, input.organizacionId),
+      actorUsuarioId: permisos.usuarioId,
+    },
+  }
+}
+
+export async function actualizarBloqueoSedesUsuario(input: {
+  usuarioId: string
+  organizacionId: string
+  bloquear: boolean
+}) {
+  const usuario = await getUser()
+  if (!usuario) return { error: 'No autenticado' }
+
+  const permisos = await getActorPermisos(usuario)
+  const puedeEditar = permisos.esSuperAdmin || esOwnerDeOrganizacion(permisos, input.organizacionId)
+  if (!puedeEditar) {
+    return { error: 'No autorizado. Solo el admin dueño del cliente puede cambiar este bloqueo.' }
+  }
+
+  const supabase = createServiceRoleClient()
+  const { error } = await supabase
+    .from('usuarios_control_acceso')
+    .upsert(
+      {
+        usuario_id: input.usuarioId,
+        organizacion_id: input.organizacionId,
+        bloquear_sedes_otros_admins: input.bloquear,
+        updated_by_usuario_id: permisos.usuarioId,
+      },
+      { onConflict: 'usuario_id,organizacion_id' }
+    )
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin/usuarios')
+  revalidatePath('/super-admin/usuarios')
+  return { success: true }
+}
+
 export async function asignarRolUsuario(input: AsignarRolInput) {
   const usuario = await getUser()
 
@@ -273,7 +415,8 @@ export async function asignarRolUsuario(input: AsignarRolInput) {
     return { error: 'No autenticado' }
   }
 
-  const { esSuperAdmin, esAdmin, sedesAdmin } = await getActorPermisos(usuario)
+  const permisos = await getActorPermisos(usuario)
+  const { esSuperAdmin, esAdmin, sedesAdmin } = permisos
 
   if (!esSuperAdmin && !esAdmin) {
     return { error: 'No autorizado. Solo admin o super admin pueden asignar roles.' }
@@ -358,6 +501,21 @@ export async function asignarRolUsuario(input: AsignarRolInput) {
     return { error: 'Sede no valida.' }
   }
 
+  if (input.rol === 'admin' && !esOwnerDeOrganizacion(permisos, sede.organizacion_id)) {
+    return { error: 'No autorizado. Solo el admin dueño del cliente puede asignar rol admin.' }
+  }
+
+  const sedeSetGuard = await canModifySedeSetForTarget(supabase, permisos, {
+    usuarioId: input.usuarioId,
+    organizacionId: sede.organizacion_id,
+    sedeId: input.sedeId,
+    rol: input.rol,
+    mode: 'assign',
+  })
+  if (!sedeSetGuard.ok) {
+    return { error: sedeSetGuard.error || 'No autorizado para modificar sedes de este usuario.' }
+  }
+
   const { error } = await supabase
     .from('membresias')
     .upsert(
@@ -422,7 +580,8 @@ export async function quitarRolUsuario(input: QuitarRolInput) {
     return { error: 'No autenticado' }
   }
 
-  const { esSuperAdmin, esAdmin, sedesAdmin } = await getActorPermisos(usuario)
+  const permisos = await getActorPermisos(usuario)
+  const { esSuperAdmin, esAdmin, sedesAdmin } = permisos
 
   if (!esSuperAdmin && !esAdmin) {
     return { error: 'No autorizado. Solo admin o super admin pueden quitar roles.' }
@@ -440,6 +599,33 @@ export async function quitarRolUsuario(input: QuitarRolInput) {
 
   if (input.rol !== 'super_admin' && !esSuperAdmin && !sedesAdmin.includes(input.sedeId!)) {
     return { error: 'No autorizado para quitar roles en esa sede.' }
+  }
+
+  if (input.rol !== 'super_admin' && input.sedeId) {
+    const { data: sede, error: sedeError } = await supabase
+      .from('sedes')
+      .select('id, organizacion_id')
+      .eq('id', input.sedeId)
+      .single()
+
+    if (sedeError || !sede) {
+      return { error: 'Sede no valida.' }
+    }
+
+    if (input.rol === 'admin' && !esOwnerDeOrganizacion(permisos, sede.organizacion_id)) {
+      return { error: 'No autorizado. Solo el admin dueño del cliente puede quitar rol admin.' }
+    }
+
+    const sedeSetGuard = await canModifySedeSetForTarget(supabase, permisos, {
+      usuarioId: input.usuarioId,
+      organizacionId: sede.organizacion_id,
+      sedeId: input.sedeId,
+      rol: input.rol,
+      mode: 'remove',
+    })
+    if (!sedeSetGuard.ok) {
+      return { error: sedeSetGuard.error || 'No autorizado para modificar sedes de este usuario.' }
+    }
   }
 
   let query = supabase

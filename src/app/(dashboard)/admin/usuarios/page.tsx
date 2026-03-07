@@ -70,6 +70,7 @@ export default async function AdminUsuariosPage() {
       <UsuariosAdminTable
         usuarios={usuarios as any[]}
         sedes={sedes as any[]}
+        currentUserId={usuarioActual.id}
         canAssignSuperAdmin={esSuperAdmin}
         canCreateUsers={esSuperAdmin || esAdmin}
       />

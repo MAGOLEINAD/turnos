@@ -1,6 +1,6 @@
 import { CalendarioAlumno } from '@/components/calendario/CalendarioAlumno'
 import { getUser } from '@/lib/actions/auth.actions'
-import { createServiceRoleClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
 export default async function AlumnoCalendarioPage() {
@@ -11,12 +11,42 @@ export default async function AlumnoCalendarioPage() {
   }
 
   // Obtener datos del alumno
-  const supabase = createServiceRoleClient()
-  const { data: alumno } = await supabase
+  const supabase = await createClient()
+  const { data: membresiasAlumno } = await supabase
+    .from('membresias')
+    .select('sede_id')
+    .eq('usuario_id', usuario.id)
+    .eq('rol', 'alumno')
+    .eq('activa', true)
+    .not('sede_id', 'is', null)
+
+  const sedeIdsPermitidas = (membresiasAlumno || [])
+    .map((m) => m.sede_id)
+    .filter((id): id is string => !!id)
+
+  if (sedeIdsPermitidas.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">
+          No tienes accesos activos de alumno. Contacta al administrador.
+        </p>
+      </div>
+    )
+  }
+
+  const sedeContexto =
+    usuario?.membresia_activa?.rol === 'alumno' && usuario?.membresia_activa?.sede_id
+      ? usuario.membresia_activa.sede_id
+      : sedeIdsPermitidas[0]
+
+  const { data: perfilesAlumno } = await supabase
     .from('alumnos')
     .select('id, sede_id')
     .eq('usuario_id', usuario.id)
-    .single()
+    .in('sede_id', sedeIdsPermitidas)
+    .eq('activo', true)
+
+  const alumno = (perfilesAlumno || []).find((perfil) => perfil.sede_id === sedeContexto) || perfilesAlumno?.[0]
 
   if (!alumno) {
     return (

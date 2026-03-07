@@ -257,7 +257,6 @@ export function ProfesoresList({ profesores: profesoresIniciales, sedeId, sedes 
         onOpenChange={setModalOpen}
         profesor={profesorEditar}
         sedeId={sedeId}
-        sedes={sedes}
         onSuccess={handleSuccess}
       />
 

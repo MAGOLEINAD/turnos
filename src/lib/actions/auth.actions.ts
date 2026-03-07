@@ -65,6 +65,10 @@ function sanitizeMembresias(base: any[]): MembresiaAuth[] {
   }))
 }
 
+function getRolesActivosUnicos(membresias: MembresiaAuth[]) {
+  return Array.from(new Set((membresias || []).map((m) => m.rol)))
+}
+
 async function getServiceRoleClientSafe() {
   try {
     return createServiceRoleClient()
@@ -257,6 +261,7 @@ export async function login(data: LoginInput) {
   const tieneMembresias = (membresias || []).length > 0
   const tieneAccesoHabilitado = (membresias || []).some(isMembresiaHabilitada)
   const membresiasHabilitadas = (membresias || []).filter(isMembresiaHabilitada)
+  const rolesActivosUnicos = getRolesActivosUnicos(membresiasHabilitadas)
 
   if (tieneMembresias && !tieneAccesoHabilitado) {
     await supabase.auth.signOut()
@@ -268,11 +273,15 @@ export async function login(data: LoginInput) {
     redirect('/sin-acceso')
   }
 
-  if (membresiasHabilitadas.length === 1) {
-    await ensurePerfilPorRol(authData.user.id, membresiasHabilitadas[0])
-    await setContextoActivo(authData.user.id, membresiasHabilitadas[0].id)
+  if (rolesActivosUnicos.length === 1 && membresiasHabilitadas.length > 0) {
+    const contextoActivoId = await getContextoActivo(authData.user.id)
+    const membresiaDestino =
+      membresiasHabilitadas.find((m) => m.id === contextoActivoId) || membresiasHabilitadas[0]
+
+    await ensurePerfilPorRol(authData.user.id, membresiaDestino)
+    await setContextoActivo(authData.user.id, membresiaDestino.id)
     revalidatePath('/', 'layout')
-    redirect(getDashboardRoute(membresiasHabilitadas[0].rol))
+    redirect(getDashboardRoute(membresiaDestino.rol))
   }
 
   revalidatePath('/', 'layout')
@@ -405,6 +414,7 @@ const getUserCached = cache(async () => {
     const tieneMembresias = membresiasUsuario.length > 0
     const membresiasHabilitadas = membresiasUsuario.filter(isMembresiaHabilitada)
     const tieneAccesoHabilitado = membresiasHabilitadas.length > 0
+    const rolesActivosUnicos = getRolesActivosUnicos(membresiasHabilitadas)
 
     if (tieneMembresias && !tieneAccesoHabilitado) {
       return null
@@ -414,15 +424,15 @@ const getUserCached = cache(async () => {
     let membresiaActiva =
       membresiasHabilitadas.find((m) => m.id === contextoActivoId) || null
 
-    if (!membresiaActiva && membresiasHabilitadas.length === 1) {
+    if (!membresiaActiva && rolesActivosUnicos.length === 1 && membresiasHabilitadas.length > 0) {
       membresiaActiva = membresiasHabilitadas[0]
       await setContextoActivo(user.id, membresiaActiva.id)
     }
 
     usuario.membresias = orderMembresiasByActive(membresiasUsuario, membresiaActiva)
     usuario.membresia_activa = membresiaActiva
-    usuario.requiere_seleccion_perfil = membresiasHabilitadas.length > 1 && !membresiaActiva
-    usuario.tiene_multiples_perfiles = membresiasHabilitadas.length > 1
+    usuario.requiere_seleccion_perfil = rolesActivosUnicos.length > 1 && !membresiaActiva
+    usuario.tiene_multiples_perfiles = rolesActivosUnicos.length > 1
 
     return usuario
   } catch (error) {

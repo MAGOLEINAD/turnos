@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -8,6 +8,7 @@ import {
   Download,
   EllipsisVertical,
   FileSpreadsheet,
+  Lock,
   Mail,
   Plus,
   ShieldCheck,
@@ -17,10 +18,12 @@ import {
   UserPlus,
 } from 'lucide-react'
 import {
+  actualizarBloqueoSedesUsuario,
   asignarRolUsuario,
   crearUsuario,
   eliminarUsuario,
   importarUsuarios,
+  obtenerConfigAccesoUsuario,
   quitarRolUsuario,
 } from '@/lib/actions/usuarios.actions'
 import { Badge } from '@/components/ui/badge'
@@ -44,8 +47,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { formatClientName } from '@/lib/utils/clientes'
+import { formatClientName, normalizeClientIcon } from '@/lib/utils/clientes'
 import { MultiSelect, type MultiSelectOption } from '@/components/ui/multi-select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ROLES_ICONS, ROLES_LABELS, type RolUsuario } from '@/lib/constants/roles'
 
 type RolGestionable = Exclude<RolUsuario, 'super_admin'>
@@ -79,6 +83,7 @@ interface Sede {
 interface UsuariosAdminTableProps {
   usuarios: UsuarioRow[]
   sedes: Sede[]
+  currentUserId: string
   canAssignSuperAdmin: boolean
   canCreateUsers: boolean
   showClientFilter?: boolean
@@ -102,6 +107,14 @@ function getOrganizacionLabel(sede: Sede) {
   return formatClientName(sede.organizaciones.nombre, sede.organizaciones.icono)
 }
 
+function getOrganizacionIcon(sede: Sede) {
+  if (!sede.organizaciones) return normalizeClientIcon()
+  if (Array.isArray(sede.organizaciones)) {
+    return normalizeClientIcon(sede.organizaciones[0]?.icono)
+  }
+  return normalizeClientIcon(sede.organizaciones.icono)
+}
+
 function normalizeHeader(value: string) {
   return value
     .toLowerCase()
@@ -113,6 +126,7 @@ function normalizeHeader(value: string) {
 export function UsuariosAdminTable({
   usuarios,
   sedes,
+  currentUserId,
   canAssignSuperAdmin,
   canCreateUsers,
   showClientFilter = false,
@@ -123,7 +137,11 @@ export function UsuariosAdminTable({
   const [usuarioObjetivo, setUsuarioObjetivo] = useState<UsuarioRow | null>(null)
   const [rolesSeleccionados, setRolesSeleccionados] = useState<RolGestionable[]>([])
   const [superAdminSeleccionado, setSuperAdminSeleccionado] = useState(false)
-  const [sedeSeleccionada, setSedeSeleccionada] = useState<string>('')
+  const [sedesSeleccionadas, setSedesSeleccionadas] = useState<string[]>([])
+  const [bloquearSedesOtrosAdmins, setBloquearSedesOtrosAdmins] = useState(false)
+  const [puedeEditarBloqueoSedes, setPuedeEditarBloqueoSedes] = useState(false)
+  const [puedeAsignarAdmin, setPuedeAsignarAdmin] = useState(true)
+  const [loadingPoliticasAcceso, setLoadingPoliticasAcceso] = useState(false)
   const [loadingRol, setLoadingRol] = useState(false)
 
   const [createModalOpen, setCreateModalOpen] = useState(false)
@@ -169,13 +187,21 @@ export function UsuariosAdminTable({
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
   }, [sedes])
 
-  const roleOptions = useMemo<MultiSelectOption[]>(
+  const roleOptionsBase = useMemo<MultiSelectOption[]>(
     () => [
-      { value: 'admin', label: `${ROLES_ICONS.admin} ${ROLES_LABELS.admin}` },
       { value: 'profesor', label: `${ROLES_ICONS.profesor} ${ROLES_LABELS.profesor}` },
       { value: 'alumno', label: `${ROLES_ICONS.alumno} ${ROLES_LABELS.alumno}` },
     ],
     []
+  )
+
+  const sedeOptions = useMemo<MultiSelectOption[]>(
+    () =>
+      sedesOrdenadas.map((sede) => {
+        const label = `${getOrganizacionIcon(sede)} ${sede.nombre}`
+        return { value: sede.id, label }
+      }),
+    [sedesOrdenadas]
   )
 
   const sedesPorId = useMemo(() => {
@@ -185,6 +211,39 @@ export function UsuariosAdminTable({
     }
     return map
   }, [sedes])
+
+  const organizacionActivaModal = useMemo(() => {
+    const primeraSede = sedesSeleccionadas[0]
+    if (!primeraSede) return null
+    return sedesPorId.get(primeraSede)?.organizacion_id || null
+  }, [sedesSeleccionadas, sedesPorId])
+
+  const roleOptions = useMemo<MultiSelectOption[]>(() => {
+    const esMismaPersona = !!usuarioObjetivo && usuarioObjetivo.id === currentUserId
+    const tieneAdminSeleccionado = rolesSeleccionados.includes('admin')
+
+    if (puedeAsignarAdmin) {
+      return [
+        { value: 'admin', label: `${ROLES_ICONS.admin} ${ROLES_LABELS.admin}` },
+        ...roleOptionsBase,
+      ]
+    }
+
+    if (esMismaPersona && tieneAdminSeleccionado) {
+      return [
+        { value: 'admin', label: `${ROLES_ICONS.admin} ${ROLES_LABELS.admin}`, disabled: true },
+        ...roleOptionsBase,
+      ]
+    }
+
+    return roleOptionsBase
+  }, [puedeAsignarAdmin, roleOptionsBase, rolesSeleccionados, usuarioObjetivo, currentUserId])
+
+  useEffect(() => {
+    if (!usuarioObjetivo || superAdminSeleccionado || !organizacionActivaModal) return
+    cargarPoliticasAcceso(usuarioObjetivo.id, organizacionActivaModal)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuarioObjetivo?.id, superAdminSeleccionado, organizacionActivaModal])
 
   const usuariosFiltrados = useMemo(() => {
     if (!showClientFilter || filtroCliente === 'all') return usuarios
@@ -244,17 +303,41 @@ export function UsuariosAdminTable({
   const abrirModalAcceso = (usuario: UsuarioRow) => {
     const membresiasActivas = (usuario.membresias || []).filter((m) => m.activa)
     const tieneSuperAdmin = membresiasActivas.some((m) => m.rol === 'super_admin')
-    const membresiaConSede =
-      membresiasActivas.find((m) => m.sede_id && m.rol !== 'super_admin') || null
-    const sedeInicial = membresiaConSede?.sede_id || ''
+    const sedesIniciales = Array.from(
+      new Set(
+        membresiasActivas
+          .filter((m) => m.sede_id && m.rol !== 'super_admin')
+          .map((m) => m.sede_id as string)
+      )
+    )
     const rolesIniciales = membresiasActivas
-      .filter((m) => m.sede_id === sedeInicial && m.rol !== 'super_admin')
+      .filter((m) => m.sede_id && m.rol !== 'super_admin')
       .map((m) => m.rol as RolGestionable)
 
     setUsuarioObjetivo(usuario)
     setSuperAdminSeleccionado(tieneSuperAdmin)
-    setSedeSeleccionada(sedeInicial)
+    setSedesSeleccionadas(sedesIniciales)
     setRolesSeleccionados(Array.from(new Set(rolesIniciales)))
+  }
+
+  const cargarPoliticasAcceso = async (usuarioId: string, organizacionId: string) => {
+    setLoadingPoliticasAcceso(true)
+    try {
+      const result = await obtenerConfigAccesoUsuario({ usuarioId, organizacionId })
+      if (result.error || !result.data) {
+        setBloquearSedesOtrosAdmins(false)
+        setPuedeEditarBloqueoSedes(false)
+        setPuedeAsignarAdmin(false)
+        if (result.error) toast.error(result.error)
+        return
+      }
+
+      setBloquearSedesOtrosAdmins(result.data.bloquearSedesOtrosAdmins)
+      setPuedeEditarBloqueoSedes(result.data.puedeEditarBloqueo)
+      setPuedeAsignarAdmin(result.data.puedeAsignarAdmin)
+    } finally {
+      setLoadingPoliticasAcceso(false)
+    }
   }
 
   const cerrarModalAcceso = () => {
@@ -262,25 +345,17 @@ export function UsuariosAdminTable({
     setUsuarioObjetivo(null)
     setSuperAdminSeleccionado(false)
     setRolesSeleccionados([])
-    setSedeSeleccionada('')
-  }
-
-  const onSedeChange = (nextSedeId: string) => {
-    setSedeSeleccionada(nextSedeId)
-    if (!usuarioObjetivo) return
-
-    const rolesActivosEnSede = (usuarioObjetivo.membresias || [])
-      .filter((m) => m.activa && m.sede_id === nextSedeId && m.rol !== 'super_admin')
-      .map((m) => m.rol as RolGestionable)
-
-    setRolesSeleccionados(Array.from(new Set(rolesActivosEnSede)))
+    setSedesSeleccionadas([])
+    setBloquearSedesOtrosAdmins(false)
+    setPuedeEditarBloqueoSedes(false)
+    setPuedeAsignarAdmin(true)
   }
 
   const guardarAccesos = async () => {
     if (!usuarioObjetivo) return
 
-    if (!superAdminSeleccionado && !sedeSeleccionada) {
-      toast.error('Selecciona una sede para continuar.')
+    if (!superAdminSeleccionado && sedesSeleccionadas.length === 0) {
+      toast.error('Selecciona al menos una sede para continuar.')
       return
     }
     if (!superAdminSeleccionado && (rolesSeleccionados.length < 1 || rolesSeleccionados.length > 3)) {
@@ -290,6 +365,18 @@ export function UsuariosAdminTable({
 
     setLoadingRol(true)
     try {
+      if (!superAdminSeleccionado && organizacionActivaModal && puedeEditarBloqueoSedes) {
+        const lockResult = await actualizarBloqueoSedesUsuario({
+          usuarioId: usuarioObjetivo.id,
+          organizacionId: organizacionActivaModal,
+          bloquear: bloquearSedesOtrosAdmins,
+        })
+        if (lockResult.error) {
+          toast.error(lockResult.error)
+          return
+        }
+      }
+
       if (superAdminSeleccionado) {
         const result = await asignarRolUsuario({
           usuarioId: usuarioObjetivo.id,
@@ -300,32 +387,40 @@ export function UsuariosAdminTable({
           return
         }
       } else {
-        const rolesActualesEnSede = (usuarioObjetivo.membresias || [])
-          .filter((m) => m.activa && m.sede_id === sedeSeleccionada && m.rol !== 'super_admin')
-          .map((m) => m.rol as RolGestionable)
+        for (const sedeId of sedesSeleccionadas) {
+          const rolesActualesEnSede = (usuarioObjetivo.membresias || [])
+            .filter((m) => m.activa && m.sede_id === sedeId && m.rol !== 'super_admin')
+            .map((m) => m.rol as RolGestionable)
 
-        for (const rol of rolesSeleccionados) {
-          const result = await asignarRolUsuario({
-            usuarioId: usuarioObjetivo.id,
-            rol,
-            sedeId: sedeSeleccionada,
-          })
-          if (result.error) {
-            toast.error(result.error)
-            return
+          for (const rol of rolesSeleccionados) {
+            if (rol === 'admin' && !puedeAsignarAdmin) {
+              continue
+            }
+            const result = await asignarRolUsuario({
+              usuarioId: usuarioObjetivo.id,
+              rol,
+              sedeId,
+            })
+            if (result.error) {
+              toast.error(result.error)
+              return
+            }
           }
-        }
 
-        const rolesAQuitar = rolesActualesEnSede.filter((rol) => !rolesSeleccionados.includes(rol))
-        for (const rol of rolesAQuitar) {
-          const result = await quitarRolUsuario({
-            usuarioId: usuarioObjetivo.id,
-            rol,
-            sedeId: sedeSeleccionada,
-          })
-          if (result.error) {
-            toast.error(result.error)
-            return
+          const rolesAQuitar = rolesActualesEnSede.filter((rol) => !rolesSeleccionados.includes(rol))
+          for (const rol of rolesAQuitar) {
+            if (rol === 'admin' && !puedeAsignarAdmin) {
+              continue
+            }
+            const result = await quitarRolUsuario({
+              usuarioId: usuarioObjetivo.id,
+              rol,
+              sedeId,
+            })
+            if (result.error) {
+              toast.error(result.error)
+              return
+            }
           }
         }
       }
@@ -580,6 +675,9 @@ export function UsuariosAdminTable({
                   const membresiasActivas = (usuario.membresias || [])
                     .filter((m) => m.activa)
                     .sort((a, b) => ROLE_ORDER[a.rol] - ROLE_ORDER[b.rol])
+                  const rolesActivosUnicos = Array.from(new Set(membresiasActivas.map((m) => m.rol))).sort(
+                    (a, b) => ROLE_ORDER[a] - ROLE_ORDER[b]
+                  )
 
                   return (
                     <tr key={usuario.id} className="hover:bg-muted/30">
@@ -588,11 +686,11 @@ export function UsuariosAdminTable({
                         {[usuario.nombre, usuario.apellido].filter(Boolean).join(' ') || 'Sin nombre'}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {membresiasActivas.length > 0 ? (
+                        {rolesActivosUnicos.length > 0 ? (
                           <div className="flex flex-wrap gap-1.5">
-                            {membresiasActivas.map((membresia) => (
-                              <Badge key={membresia.id} variant="secondary" className="font-medium">
-                                {ROLES_ICONS[membresia.rol]} {ROLES_LABELS[membresia.rol]}
+                            {rolesActivosUnicos.map((rol) => (
+                              <Badge key={`${usuario.id}-${rol}`} variant="secondary" className="font-medium">
+                                {ROLES_ICONS[rol]} {ROLES_LABELS[rol]}
                               </Badge>
                             ))}
                           </div>
@@ -659,7 +757,7 @@ export function UsuariosAdminTable({
               Gestionar acceso de usuario
             </DialogTitle>
             <DialogDescription>
-              Configura sede y rol para{' '}
+              Configura sedes y rol para{' '}
               <span className="font-medium text-foreground">{usuarioObjetivo?.email}</span>.
             </DialogDescription>
           </DialogHeader>
@@ -667,22 +765,42 @@ export function UsuariosAdminTable({
           <div className="space-y-4">
             {!superAdminSeleccionado && (
               <div className="space-y-2">
-                <Label htmlFor="sede-usuario">Sede</Label>
-                <Select value={sedeSeleccionada} onValueChange={onSedeChange}>
-                  <SelectTrigger id="sede-usuario">
-                    <SelectValue placeholder="Selecciona una sede" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sedesOrdenadas.map((sede) => {
-                      const organizacionLabel = getOrganizacionLabel(sede)
-                      return (
-                        <SelectItem key={sede.id} value={sede.id}>
-                          {organizacionLabel ? `${organizacionLabel} - ${sede.nombre}` : sede.nombre}
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
+                <Label>Sedes</Label>
+                <MultiSelect
+                  options={sedeOptions}
+                  value={sedesSeleccionadas}
+                  onChange={(next) => setSedesSeleccionadas(next)}
+                  placeholder="Seleccionar sedes"
+                  searchable={false}
+                  compactSummary
+                  showBadges={false}
+                  emptyText="No se encontraron sedes"
+                />
+              </div>
+            )}
+
+            {!superAdminSeleccionado && organizacionActivaModal && (
+              <div className="relative overflow-hidden rounded-lg border bg-gradient-to-br from-muted/40 to-muted/20 p-3.5">
+                <Lock className="absolute -bottom-2 -right-2 h-16 w-16 rotate-12 text-primary/5" />
+                <div className="relative flex items-center gap-3">
+                  <Checkbox
+                    id="lock-sedes-otros-admins"
+                    checked={bloquearSedesOtrosAdmins}
+                    onCheckedChange={(checked) => setBloquearSedesOtrosAdmins(checked === true)}
+                    disabled={!puedeEditarBloqueoSedes || loadingPoliticasAcceso}
+                  />
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="lock-sedes-otros-admins"
+                      className="cursor-pointer text-sm font-medium leading-snug"
+                    >
+                      Bloquear edición de sedes por otros admins
+                    </Label>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Solo vos podrás modificar las sedes de este usuario
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -699,7 +817,7 @@ export function UsuariosAdminTable({
                       setSuperAdminSeleccionado(next)
                       if (next) {
                         setRolesSeleccionados([])
-                        setSedeSeleccionada('')
+                        setSedesSeleccionadas([])
                       }
                     }}
                   >
@@ -719,7 +837,7 @@ export function UsuariosAdminTable({
               </div>
               {!superAdminSeleccionado && (
                 <p className="text-xs text-muted-foreground">
-                  Seleccionados: {rolesSeleccionados.length} / 3
+                  Seleccionados: {rolesSeleccionados.filter((rol) => roleOptions.some((o) => o.value === rol)).length} / 3
                 </p>
               )}
             </div>
