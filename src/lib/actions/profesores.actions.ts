@@ -11,6 +11,16 @@ type ActorScope = {
   organizacionesAdmin: string[]
 }
 
+function safeRevalidate(...paths: string[]) {
+  for (const path of paths) {
+    try {
+      revalidatePath(path)
+    } catch (error) {
+      console.warn('[profesores.actions] No se pudo revalidar path:', path)
+    }
+  }
+}
+
 async function getActorScope(): Promise<{ scope: ActorScope | null; error?: string }> {
   const usuario = await getUser()
   if (!usuario) return { scope: null, error: 'No autenticado' }
@@ -126,8 +136,7 @@ export async function crearProfesor(data: ProfesorInput) {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/admin/profesores')
-  revalidatePath('/super-admin/profesores')
+  safeRevalidate('/admin/profesores', '/super-admin/profesores')
   return { data: profesor }
 }
 
@@ -273,9 +282,7 @@ export async function actualizarProfesor(id: string, data: Partial<ProfesorInput
 
   if (error) return { error: error.message }
 
-  revalidatePath('/admin/profesores')
-  revalidatePath('/super-admin/profesores')
-  revalidatePath('/profesor/calendario')
+  safeRevalidate('/admin/profesores', '/super-admin/profesores', '/profesor/calendario')
   return { data: profesor }
 }
 
@@ -307,8 +314,7 @@ export async function desactivarProfesor(id: string) {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/admin/profesores')
-  revalidatePath('/super-admin/profesores')
+  safeRevalidate('/admin/profesores', '/super-admin/profesores')
   return { success: true }
 }
 
@@ -340,12 +346,15 @@ export async function activarProfesor(id: string) {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/admin/profesores')
-  revalidatePath('/super-admin/profesores')
+  safeRevalidate('/admin/profesores', '/super-admin/profesores')
   return { success: true }
 }
 
 export async function obtenerUsuariosDisponibles(sedeId: string) {
+  return obtenerUsuariosDisponiblesPorSedes([sedeId])
+}
+
+export async function obtenerUsuariosDisponiblesPorSedes(sedeIds: string[]) {
   const actor = await getActorScope()
   if (!actor.scope) return { error: actor.error || 'No autenticado' }
 
@@ -353,32 +362,81 @@ export async function obtenerUsuariosDisponibles(sedeId: string) {
     return { error: 'No autorizado para ver usuarios disponibles.' }
   }
 
+  const sedeIdsUnicos = Array.from(new Set((sedeIds || []).filter(Boolean)))
+  if (sedeIdsUnicos.length === 0) {
+    return { data: [] }
+  }
+
   const supabase = createServiceRoleClient()
-  const sedeCheck = await canAccessSede(supabase, actor.scope, sedeId)
-  if (!sedeCheck.ok) return { error: sedeCheck.error }
+
+  for (const sedeId of sedeIdsUnicos) {
+    const sedeCheck = await canAccessSede(supabase, actor.scope, sedeId)
+    if (!sedeCheck.ok) return { error: sedeCheck.error }
+  }
+
+  const { data: membresiasProfesor, error: membresiasError } = await supabase
+    .from('membresias')
+    .select('usuario_id, sede_id')
+    .eq('rol', 'profesor')
+    .eq('activa', true)
+    .in('sede_id', sedeIdsUnicos)
+
+  if (membresiasError) return { error: membresiasError.message }
+
+  const sedesPorUsuario = new Map<string, Set<string>>()
+  for (const membresia of membresiasProfesor || []) {
+    if (!membresia.usuario_id || !membresia.sede_id) continue
+    if (!sedesPorUsuario.has(membresia.usuario_id)) {
+      sedesPorUsuario.set(membresia.usuario_id, new Set())
+    }
+    sedesPorUsuario.get(membresia.usuario_id)!.add(membresia.sede_id)
+  }
+
+  const idsConRolProfesor = Array.from(sedesPorUsuario.entries())
+    .filter(([, sedesUsuario]) => sedesUsuario.size === sedeIdsUnicos.length)
+    .map(([usuarioId]) => usuarioId)
+
+  if (idsConRolProfesor.length === 0) {
+    return { data: [] }
+  }
 
   const { data: profesores } = await supabase
     .from('profesores')
-    .select('usuario_id')
-    .eq('sede_id', sedeId)
+    .select('usuario_id, sede_id')
+    .in('sede_id', sedeIdsUnicos)
+    .in('usuario_id', idsConRolProfesor)
 
-  const idsProfesor = (profesores || []).map((p) => p.usuario_id)
-
-  let query = supabase.from('usuarios').select(
-    `
-      id,
-      email,
-      nombre,
-      apellido,
-      telefono
-    `
-  )
-
-  if (idsProfesor.length > 0) {
-    query = query.not('id', 'in', `(${idsProfesor.join(',')})`)
+  const sedesProfesorPorUsuario = new Map<string, Set<string>>()
+  for (const profesor of profesores || []) {
+    if (!profesor.usuario_id || !profesor.sede_id) continue
+    if (!sedesProfesorPorUsuario.has(profesor.usuario_id)) {
+      sedesProfesorPorUsuario.set(profesor.usuario_id, new Set())
+    }
+    sedesProfesorPorUsuario.get(profesor.usuario_id)!.add(profesor.sede_id)
   }
 
-  const { data, error } = await query
+  const idsDisponibles = idsConRolProfesor.filter(
+    (id) => (sedesProfesorPorUsuario.get(id)?.size || 0) < sedeIdsUnicos.length
+  )
+
+  if (idsDisponibles.length === 0) {
+    return { data: [] }
+  }
+
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select(
+      `
+        id,
+        email,
+        nombre,
+        apellido,
+        telefono
+      `
+    )
+    .in('id', idsDisponibles)
+    .order('nombre', { ascending: true })
+    .order('apellido', { ascending: true })
 
   if (error) return { error: error.message }
   return { data }

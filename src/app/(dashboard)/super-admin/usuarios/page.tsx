@@ -54,6 +54,7 @@ export default async function UsuariosPage() {
         sedes={sedes as any[]}
         canAssignSuperAdmin={canAssignSuperAdmin}
         canCreateUsers={canAssignSuperAdmin}
+        showClientFilter={true}
       />
     </div>
   )

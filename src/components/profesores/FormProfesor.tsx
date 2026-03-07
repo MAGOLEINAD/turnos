@@ -130,7 +130,7 @@ export function FormProfesor({
                 <p className="text-sm text-muted-foreground">Cargando usuarios...</p>
               ) : usuarios.length === 0 ? (
                 <p className="text-sm text-orange-600">
-                  No hay usuarios disponibles. Todos los usuarios ya son profesores.
+                  No hay usuarios con rol profesor disponibles en esta sede.
                 </p>
               ) : (
                 <Select
@@ -155,9 +155,9 @@ export function FormProfesor({
             </div>
           )}
 
-          {/* Tipo de Autorización */}
+          {/* Tipo de autorizacion de clases */}
           <div className="space-y-2">
-            <Label htmlFor="tipo_autorizacion">Tipo de Autorización *</Label>
+            <Label htmlFor="tipo_autorizacion">Tipo de Clases *</Label>
             <Select
               onValueChange={(value) => setValue('tipo_autorizacion', value as any)}
               defaultValue={watch('tipo_autorizacion')}

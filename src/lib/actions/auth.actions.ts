@@ -24,67 +24,38 @@ function isMembresiaHabilitada(membresia: any) {
 }
 
 async function getMembresiasConEstadoOrganizacion(supabase: any, usuarioId: string) {
-  const { data: membresiasBase, error: membresiasError } = await supabase
+  const { data: membresias, error } = await supabase
+    .from('membresias')
+    .select('rol, activa, sede_id, organizacion_id, organizaciones(activa, motivo_desactivacion), sedes(nombre)')
+    .eq('usuario_id', usuarioId)
+
+  if (!error) {
+    return { data: membresias || [], error: null }
+  }
+
+  // Fallback defensivo: si falla el join con organizaciones (RLS/datos),
+  // no bloquear el acceso por completo.
+  const { data: membresiasBase, error: baseError } = await supabase
     .from('membresias')
     .select('rol, activa, sede_id, organizacion_id')
     .eq('usuario_id', usuarioId)
 
-  if (membresiasError) {
-    return { data: null, error: membresiasError }
+  if (baseError) {
+    return { data: null, error: baseError }
   }
 
-  const orgIds = Array.from(
-    new Set(
-      (membresiasBase || [])
-        .map((m: any) => m.organizacion_id)
-        .filter((id: string | null) => !!id)
-    )
-  ) as string[]
-
-  const organizacionesMap = new Map<string, { activa: boolean; motivo_desactivacion: string | null }>()
-
-  if (orgIds.length > 0) {
-    let orgData: any[] | null = null
-    let orgError: any = null
-
-    try {
-      const serviceRole = createServiceRoleClient()
-      const result = await serviceRole
-        .from('organizaciones')
-        .select('id, activa, motivo_desactivacion')
-        .in('id', orgIds)
-      orgData = result.data
-      orgError = result.error
-    } catch (error) {
-      const result = await supabase
-        .from('organizaciones')
-        .select('id, activa, motivo_desactivacion')
-        .in('id', orgIds)
-      orgData = result.data
-      orgError = result.error
-    }
-
-    if (orgError) {
-      return { data: null, error: orgError }
-    }
-
-    for (const org of orgData || []) {
-      organizacionesMap.set(org.id, {
-        activa: org.activa,
-        motivo_desactivacion: org.motivo_desactivacion ?? null,
-      })
-    }
-  }
-
-  const membresias = (membresiasBase || []).map((m: any) => ({
-    rol: m.rol,
-    activa: m.activa,
-    sede_id: m.sede_id,
-    organizacion_id: m.organizacion_id,
-    organizaciones: m.organizacion_id ? organizacionesMap.get(m.organizacion_id) || null : null,
+  const sanitized = (membresiasBase || []).map((m: any) => ({
+    ...m,
+    organizaciones: null,
+    sedes: null,
   }))
 
-  return { data: membresias, error: null }
+  console.warn('[auth] Fallback sin join a organizaciones en membresias.', {
+    code: error.code,
+    message: error.message,
+  })
+
+  return { data: sanitized, error: null }
 }
 
 export async function login(data: LoginInput) {

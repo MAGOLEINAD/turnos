@@ -65,12 +65,6 @@ export function ModalNuevaReserva({
     },
   })
 
-  useEffect(() => {
-    if (open && alumnoId) {
-      cargarCreditos()
-    }
-  }, [open, alumnoId, cargarCreditos])
-
   const cargarCreditos = useCallback(async () => {
     if (!alumnoId) return
 
@@ -86,6 +80,12 @@ export function ModalNuevaReserva({
       console.error('Error al cargar créditos:', error)
     }
   }, [alumnoId, sedeId])
+
+  useEffect(() => {
+    if (open && alumnoId) {
+      cargarCreditos()
+    }
+  }, [open, alumnoId, cargarCreditos])
 
   const onSubmit = async (data: ReservaInput) => {
     setLoading(true)

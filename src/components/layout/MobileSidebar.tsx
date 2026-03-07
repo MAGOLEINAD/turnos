@@ -48,6 +48,7 @@ export function MobileSidebar({ usuario, isOpen, onClose }: MobileSidebarProps) 
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 onClick={onClose}
                 className={cn(
                   'block px-4 py-3 rounded-lg text-sm font-medium transition-colors',

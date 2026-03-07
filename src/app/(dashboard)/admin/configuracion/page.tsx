@@ -1,8 +1,7 @@
 import { redirect } from 'next/navigation'
 import { ConfiguracionSede } from '@/components/sedes/ConfiguracionSede'
 import { obtenerConfiguracionSede } from '@/lib/actions/configuracion-sede.actions'
-import { getUser } from '@/lib/actions/auth.actions'
-import { createClient } from '@/lib/supabase/server'
+import { getAdminSedeContext } from '@/lib/actions/admin-context.actions'
 import { Button } from '@/components/ui/button'
 
 interface AdminConfiguracionPageProps {
@@ -12,26 +11,20 @@ interface AdminConfiguracionPageProps {
 }
 
 export default async function AdminConfiguracionPage({ searchParams }: AdminConfiguracionPageProps) {
-  const usuario = await getUser()
-
-  if (!usuario) {
+  const ctx = await getAdminSedeContext(searchParams?.sede)
+  if (!ctx.usuario) {
     redirect('/login')
   }
 
-  const supabase = await createClient()
+  if (ctx.error) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-destructive">Error: {ctx.error}</p>
+      </div>
+    )
+  }
 
-  const { data: memberships } = await supabase
-    .from('membresias')
-    .select('sede_id, organizacion_id')
-    .eq('usuario_id', usuario.id)
-    .eq('rol', 'admin')
-    .eq('activa', true)
-
-  const orgIds = Array.from(
-    new Set((memberships || []).map((m: any) => m.organizacion_id).filter(Boolean))
-  )
-
-  if (orgIds.length === 0) {
+  if (ctx.sedes.length === 0) {
     return (
       <div className="py-12 text-center">
         <p className="text-muted-foreground">
@@ -41,16 +34,8 @@ export default async function AdminConfiguracionPage({ searchParams }: AdminConf
     )
   }
 
-  const { data: sedes } = await supabase
-    .from('sedes')
-    .select('id, nombre, organizacion_id')
-    .in('organizacion_id', orgIds)
-    .order('nombre', { ascending: true })
-
-  const sedesDisponibles = sedes || []
-  const sedeSeleccionada =
-    (searchParams?.sede && sedesDisponibles.find((s) => s.id === searchParams.sede)?.id) ||
-    sedesDisponibles[0]?.id
+  const sedesDisponibles = ctx.sedes
+  const sedeSeleccionada = ctx.sedeSeleccionada
 
   if (!sedeSeleccionada) {
     return (

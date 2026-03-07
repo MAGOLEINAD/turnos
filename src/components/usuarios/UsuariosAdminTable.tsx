@@ -21,6 +21,7 @@ import {
   crearUsuario,
   eliminarUsuario,
   importarUsuarios,
+  quitarRolUsuario,
 } from '@/lib/actions/usuarios.actions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,8 +45,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { formatClientName } from '@/lib/utils/clientes'
+import { MultiSelect, type MultiSelectOption } from '@/components/ui/multi-select'
+import { ROLES_ICONS, ROLES_LABELS, type RolUsuario } from '@/lib/constants/roles'
 
-type RolUsuario = 'super_admin' | 'admin' | 'profesor' | 'alumno'
+type RolGestionable = Exclude<RolUsuario, 'super_admin'>
 
 interface Membresia {
   id: string
@@ -78,13 +81,7 @@ interface UsuariosAdminTableProps {
   sedes: Sede[]
   canAssignSuperAdmin: boolean
   canCreateUsers: boolean
-}
-
-const ROLE_LABELS: Record<RolUsuario, string> = {
-  super_admin: 'Super Admin',
-  admin: 'Admin',
-  profesor: 'Profesor',
-  alumno: 'Alumno',
+  showClientFilter?: boolean
 }
 
 const ROLE_ORDER: Record<RolUsuario, number> = {
@@ -118,12 +115,14 @@ export function UsuariosAdminTable({
   sedes,
   canAssignSuperAdmin,
   canCreateUsers,
+  showClientFilter = false,
 }: UsuariosAdminTableProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [usuarioObjetivo, setUsuarioObjetivo] = useState<UsuarioRow | null>(null)
-  const [rolSeleccionado, setRolSeleccionado] = useState<RolUsuario>('admin')
+  const [rolesSeleccionados, setRolesSeleccionados] = useState<RolGestionable[]>([])
+  const [superAdminSeleccionado, setSuperAdminSeleccionado] = useState(false)
   const [sedeSeleccionada, setSedeSeleccionada] = useState<string>('')
   const [loadingRol, setLoadingRol] = useState(false)
 
@@ -139,6 +138,9 @@ export function UsuariosAdminTable({
 
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importingUsers, setImportingUsers] = useState(false)
+  const [filtroCliente, setFiltroCliente] = useState<string>('all')
+  const [clienteNuevoUsuario, setClienteNuevoUsuario] = useState<string>('')
+  const [clienteImportacion, setClienteImportacion] = useState<string>('')
 
   const [usuarioAEliminar, setUsuarioAEliminar] = useState<UsuarioRow | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -153,45 +155,186 @@ export function UsuariosAdminTable({
     [sedes]
   )
 
+  const clientesDisponibles = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const sede of sedes) {
+      if (!sede.organizacion_id) continue
+      const label = getOrganizacionLabel(sede) || 'Cliente sin nombre'
+      if (!map.has(sede.organizacion_id)) {
+        map.set(sede.organizacion_id, label)
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, nombre]) => ({ id, nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+  }, [sedes])
+
+  const roleOptions = useMemo<MultiSelectOption[]>(
+    () => [
+      { value: 'admin', label: `${ROLES_ICONS.admin} ${ROLES_LABELS.admin}` },
+      { value: 'profesor', label: `${ROLES_ICONS.profesor} ${ROLES_LABELS.profesor}` },
+      { value: 'alumno', label: `${ROLES_ICONS.alumno} ${ROLES_LABELS.alumno}` },
+    ],
+    []
+  )
+
+  const sedesPorId = useMemo(() => {
+    const map = new Map<string, Sede>()
+    for (const sede of sedes) {
+      map.set(sede.id, sede)
+    }
+    return map
+  }, [sedes])
+
+  const usuariosFiltrados = useMemo(() => {
+    if (!showClientFilter || filtroCliente === 'all') return usuarios
+    return usuarios.filter((usuario) =>
+      (usuario.membresias || []).some((m) => m.organizacion_id === filtroCliente)
+    )
+  }, [usuarios, showClientFilter, filtroCliente])
+
+  const descargarAlumnos = () => {
+    const filas = usuariosFiltrados
+      .filter((usuario) =>
+        (usuario.membresias || []).some((m) => m.activa && m.rol === 'alumno')
+      )
+      .map((usuario) => {
+        const membresiasAlumno = (usuario.membresias || []).filter((m) => m.activa && m.rol === 'alumno')
+        const sedesAlumno = Array.from(
+          new Set(
+            membresiasAlumno
+              .map((m) => (m.sede_id ? sedesPorId.get(m.sede_id)?.nombre || '' : ''))
+              .filter(Boolean)
+          )
+        )
+        const clientesAlumno = Array.from(
+          new Set(
+            membresiasAlumno
+              .map((m) => {
+                if (!m.sede_id) return ''
+                const sede = sedesPorId.get(m.sede_id)
+                return sede ? getOrganizacionLabel(sede) : ''
+              })
+              .filter(Boolean)
+          )
+        )
+
+        return {
+          nombre: usuario.nombre || '',
+          apellido: usuario.apellido || '',
+          email: usuario.email || '',
+          telefono: usuario.telefono || '',
+          cliente: clientesAlumno.join(' | '),
+          sede: sedesAlumno.join(' | '),
+        }
+      })
+
+    if (filas.length === 0) {
+      toast.error('No hay usuarios con rol alumno para exportar.')
+      return
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(filas)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Alumnos')
+    XLSX.writeFile(workbook, 'usuarios_alumnos.xlsx')
+    toast.success(`Excel generado con ${filas.length} alumno(s).`)
+  }
+
   const abrirModalAcceso = (usuario: UsuarioRow) => {
+    const membresiasActivas = (usuario.membresias || []).filter((m) => m.activa)
+    const tieneSuperAdmin = membresiasActivas.some((m) => m.rol === 'super_admin')
+    const membresiaConSede =
+      membresiasActivas.find((m) => m.sede_id && m.rol !== 'super_admin') || null
+    const sedeInicial = membresiaConSede?.sede_id || ''
+    const rolesIniciales = membresiasActivas
+      .filter((m) => m.sede_id === sedeInicial && m.rol !== 'super_admin')
+      .map((m) => m.rol as RolGestionable)
+
     setUsuarioObjetivo(usuario)
-    setRolSeleccionado('admin')
-    setSedeSeleccionada('')
+    setSuperAdminSeleccionado(tieneSuperAdmin)
+    setSedeSeleccionada(sedeInicial)
+    setRolesSeleccionados(Array.from(new Set(rolesIniciales)))
   }
 
   const cerrarModalAcceso = () => {
     if (loadingRol) return
     setUsuarioObjetivo(null)
-    setRolSeleccionado('admin')
+    setSuperAdminSeleccionado(false)
+    setRolesSeleccionados([])
     setSedeSeleccionada('')
   }
 
-  const guardarRol = async () => {
+  const onSedeChange = (nextSedeId: string) => {
+    setSedeSeleccionada(nextSedeId)
     if (!usuarioObjetivo) return
 
-    if (rolSeleccionado !== 'super_admin' && !sedeSeleccionada) {
+    const rolesActivosEnSede = (usuarioObjetivo.membresias || [])
+      .filter((m) => m.activa && m.sede_id === nextSedeId && m.rol !== 'super_admin')
+      .map((m) => m.rol as RolGestionable)
+
+    setRolesSeleccionados(Array.from(new Set(rolesActivosEnSede)))
+  }
+
+  const guardarAccesos = async () => {
+    if (!usuarioObjetivo) return
+
+    if (!superAdminSeleccionado && !sedeSeleccionada) {
       toast.error('Selecciona una sede para continuar.')
+      return
+    }
+    if (!superAdminSeleccionado && (rolesSeleccionados.length < 1 || rolesSeleccionados.length > 3)) {
+      toast.error('Debes seleccionar entre 1 y 3 roles.')
       return
     }
 
     setLoadingRol(true)
     try {
-      const result = await asignarRolUsuario({
-        usuarioId: usuarioObjetivo.id,
-        rol: rolSeleccionado,
-        sedeId: rolSeleccionado === 'super_admin' ? undefined : sedeSeleccionada,
-      })
+      if (superAdminSeleccionado) {
+        const result = await asignarRolUsuario({
+          usuarioId: usuarioObjetivo.id,
+          rol: 'super_admin',
+        })
+        if (result.error) {
+          toast.error(result.error)
+          return
+        }
+      } else {
+        const rolesActualesEnSede = (usuarioObjetivo.membresias || [])
+          .filter((m) => m.activa && m.sede_id === sedeSeleccionada && m.rol !== 'super_admin')
+          .map((m) => m.rol as RolGestionable)
 
-      if (result.error) {
-        toast.error(result.error)
-        return
+        for (const rol of rolesSeleccionados) {
+          const result = await asignarRolUsuario({
+            usuarioId: usuarioObjetivo.id,
+            rol,
+            sedeId: sedeSeleccionada,
+          })
+          if (result.error) {
+            toast.error(result.error)
+            return
+          }
+        }
+
+        const rolesAQuitar = rolesActualesEnSede.filter((rol) => !rolesSeleccionados.includes(rol))
+        for (const rol of rolesAQuitar) {
+          const result = await quitarRolUsuario({
+            usuarioId: usuarioObjetivo.id,
+            rol,
+            sedeId: sedeSeleccionada,
+          })
+          if (result.error) {
+            toast.error(result.error)
+            return
+          }
+        }
       }
 
-      toast.success('Rol asignado correctamente.')
+      toast.success('Accesos actualizados correctamente.')
       cerrarModalAcceso()
       router.refresh()
     } catch (error) {
-      toast.error('No se pudo asignar el rol.')
+      toast.error('No se pudieron guardar los cambios de acceso.')
     } finally {
       setLoadingRol(false)
     }
@@ -211,6 +354,11 @@ export function UsuariosAdminTable({
       return
     }
 
+    if (canAssignSuperAdmin && !clienteNuevoUsuario) {
+      toast.error('Selecciona un cliente para crear el usuario.')
+      return
+    }
+
     setCreatingUser(true)
     try {
       const result = await crearUsuario({
@@ -219,6 +367,7 @@ export function UsuariosAdminTable({
         email: nuevoUsuario.email.trim().toLowerCase(),
         telefono: nuevoUsuario.telefono.trim() || null,
         password: nuevoUsuario.password,
+        organizacionId: canAssignSuperAdmin ? clienteNuevoUsuario : undefined,
       })
 
       if (result.error) {
@@ -235,6 +384,7 @@ export function UsuariosAdminTable({
         telefono: '',
         password: '',
       })
+      setClienteNuevoUsuario('')
       router.refresh()
     } catch (error) {
       toast.error('No se pudo crear el usuario.')
@@ -318,7 +468,10 @@ export function UsuariosAdminTable({
         }
       })
 
-      const result = await importarUsuarios(rows)
+      const result = await importarUsuarios(
+        rows,
+        canAssignSuperAdmin ? clienteImportacion : undefined
+      )
       if (result.error) {
         toast.error(result.error)
         return
@@ -333,6 +486,7 @@ export function UsuariosAdminTable({
       }
 
       setImportModalOpen(false)
+      setClienteImportacion('')
       router.refresh()
     } catch (error) {
       toast.error('No se pudo procesar el archivo Excel.')
@@ -346,18 +500,58 @@ export function UsuariosAdminTable({
     <>
       {(canAssignSuperAdmin || canCreateUsers) && (
         <div className="mb-4 flex flex-wrap justify-end gap-2">
-          {canAssignSuperAdmin && (
-            <Button onClick={() => setImportModalOpen(true)} variant="outline">
+          {canCreateUsers && (
+            <Button variant="outline" onClick={descargarAlumnos}>
+              <Download className="mr-2 h-4 w-4" />
+              Exportar alumnos
+            </Button>
+          )}
+          {canCreateUsers && (
+            <Button
+              onClick={() => {
+                if (canAssignSuperAdmin && !clienteImportacion && filtroCliente !== 'all') {
+                  setClienteImportacion(filtroCliente)
+                }
+                setImportModalOpen(true)
+              }}
+              variant="outline"
+            >
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Importar usuarios
             </Button>
           )}
           {canCreateUsers && (
-            <Button onClick={() => setCreateModalOpen(true)}>
+            <Button
+              onClick={() => {
+                if (canAssignSuperAdmin && !clienteNuevoUsuario && filtroCliente !== 'all') {
+                  setClienteNuevoUsuario(filtroCliente)
+                }
+                setCreateModalOpen(true)
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Nuevo usuario
             </Button>
           )}
+        </div>
+      )}
+
+      {showClientFilter && clientesDisponibles.length > 0 && (
+        <div className="mb-4 flex flex-col gap-2 sm:max-w-sm">
+          <Label htmlFor="filtro-cliente">Filtrar por cliente</Label>
+          <Select value={filtroCliente} onValueChange={setFiltroCliente}>
+            <SelectTrigger id="filtro-cliente">
+              <SelectValue placeholder="Selecciona cliente" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los clientes</SelectItem>
+              {clientesDisponibles.map((cliente) => (
+                <SelectItem key={cliente.id} value={cliente.id}>
+                  {cliente.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
@@ -375,14 +569,14 @@ export function UsuariosAdminTable({
               </tr>
             </thead>
             <tbody className="divide-y">
-              {usuarios.length === 0 ? (
+              {usuariosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     No hay usuarios registrados
                   </td>
                 </tr>
               ) : (
-                usuarios.map((usuario) => {
+                usuariosFiltrados.map((usuario) => {
                   const membresiasActivas = (usuario.membresias || [])
                     .filter((m) => m.activa)
                     .sort((a, b) => ROLE_ORDER[a.rol] - ROLE_ORDER[b.rol])
@@ -398,7 +592,7 @@ export function UsuariosAdminTable({
                           <div className="flex flex-wrap gap-1.5">
                             {membresiasActivas.map((membresia) => (
                               <Badge key={membresia.id} variant="secondary" className="font-medium">
-                                {ROLE_LABELS[membresia.rol]}
+                                {ROLES_ICONS[membresia.rol]} {ROLES_LABELS[membresia.rol]}
                               </Badge>
                             ))}
                           </div>
@@ -471,10 +665,10 @@ export function UsuariosAdminTable({
           </DialogHeader>
 
           <div className="space-y-4">
-            {rolSeleccionado !== 'super_admin' && (
+            {!superAdminSeleccionado && (
               <div className="space-y-2">
                 <Label htmlFor="sede-usuario">Sede</Label>
-                <Select value={sedeSeleccionada} onValueChange={setSedeSeleccionada}>
+                <Select value={sedeSeleccionada} onValueChange={onSedeChange}>
                   <SelectTrigger id="sede-usuario">
                     <SelectValue placeholder="Selecciona una sede" />
                   </SelectTrigger>
@@ -493,28 +687,41 @@ export function UsuariosAdminTable({
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="rol-usuario">Rol</Label>
-              <Select
-                value={rolSeleccionado}
-                onValueChange={(value) => {
-                  setRolSeleccionado(value as RolUsuario)
-                  if (value === 'super_admin') {
-                    setSedeSeleccionada('')
-                  }
-                }}
-              >
-                <SelectTrigger id="rol-usuario">
-                  <SelectValue placeholder="Selecciona un rol" />
-                </SelectTrigger>
-                <SelectContent>
-                  {canAssignSuperAdmin && (
-                    <SelectItem value="super_admin">{ROLE_LABELS.super_admin}</SelectItem>
-                  )}
-                  <SelectItem value="admin">{ROLE_LABELS.admin}</SelectItem>
-                  <SelectItem value="profesor">{ROLE_LABELS.profesor}</SelectItem>
-                  <SelectItem value="alumno">{ROLE_LABELS.alumno}</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Roles (1 a 3)</Label>
+              <div className="space-y-3">
+                {canAssignSuperAdmin && (
+                  <Button
+                    type="button"
+                    variant={superAdminSeleccionado ? 'default' : 'outline'}
+                    className="w-full justify-start"
+                    onClick={() => {
+                      const next = !superAdminSeleccionado
+                      setSuperAdminSeleccionado(next)
+                      if (next) {
+                        setRolesSeleccionados([])
+                        setSedeSeleccionada('')
+                      }
+                    }}
+                  >
+                    {ROLES_ICONS.super_admin} {ROLES_LABELS.super_admin}
+                  </Button>
+                )}
+                <MultiSelect
+                  options={roleOptions}
+                  value={rolesSeleccionados}
+                  onChange={(next) => setRolesSeleccionados(next as RolGestionable[])}
+                  placeholder="Seleccionar roles"
+                  searchPlaceholder="Buscar rol..."
+                  emptyText="No se encontraron roles"
+                  maxSelections={3}
+                  disabled={superAdminSeleccionado}
+                />
+              </div>
+              {!superAdminSeleccionado && (
+                <p className="text-xs text-muted-foreground">
+                  Seleccionados: {rolesSeleccionados.length} / 3
+                </p>
+              )}
             </div>
           </div>
 
@@ -522,7 +729,7 @@ export function UsuariosAdminTable({
             <Button variant="outline" onClick={cerrarModalAcceso} disabled={loadingRol}>
               Cancelar
             </Button>
-            <LoadingButton loading={loadingRol} loadingText="Guardando..." onClick={guardarRol}>
+            <LoadingButton loading={loadingRol} loadingText="Guardando..." onClick={guardarAccesos}>
               Guardar cambios
             </LoadingButton>
           </DialogFooter>
@@ -589,6 +796,24 @@ export function UsuariosAdminTable({
               </div>
             </div>
 
+            {canAssignSuperAdmin && (
+              <div className="space-y-2">
+                <Label htmlFor="cliente-nuevo-usuario">Cliente asociado</Label>
+                <Select value={clienteNuevoUsuario} onValueChange={setClienteNuevoUsuario}>
+                  <SelectTrigger id="cliente-nuevo-usuario">
+                    <SelectValue placeholder="Selecciona cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientesDisponibles.map((cliente) => (
+                      <SelectItem key={cliente.id} value={cliente.id}>
+                        {cliente.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="nuevo-telefono">Telefono (opcional)</Label>
@@ -638,6 +863,23 @@ export function UsuariosAdminTable({
           </DialogHeader>
 
           <div className="space-y-3">
+            {canAssignSuperAdmin && (
+              <div className="space-y-2">
+                <Label htmlFor="cliente-importacion">Cliente asociado</Label>
+                <Select value={clienteImportacion} onValueChange={setClienteImportacion}>
+                  <SelectTrigger id="cliente-importacion">
+                    <SelectValue placeholder="Selecciona cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientesDisponibles.map((cliente) => (
+                      <SelectItem key={cliente.id} value={cliente.id}>
+                        {cliente.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <Button variant="outline" className="w-full justify-start" onClick={descargarPlantilla}>
               <Download className="mr-2 h-4 w-4" />
               Descargar Excel de ejemplo

@@ -18,6 +18,13 @@ export const ROLES_LABELS: Record<RolUsuario, string> = {
   [ROLES.ALUMNO]: 'Alumno',
 }
 
+export const ROLES_ICONS: Record<RolUsuario, string> = {
+  [ROLES.SUPER_ADMIN]: '🛡️',
+  [ROLES.ADMIN]: '⚙️',
+  [ROLES.PROFESOR]: '🎓',
+  [ROLES.ALUMNO]: '📘',
+}
+
 export const ROLES_HIERARCHY: Record<RolUsuario, number> = {
   [ROLES.SUPER_ADMIN]: 1,
   [ROLES.ADMIN]: 2,

@@ -14,15 +14,29 @@ interface AsignarRolInput {
   sedeId?: string
 }
 
+interface QuitarRolInput {
+  usuarioId: string
+  rol: 'super_admin' | 'admin' | 'profesor' | 'alumno'
+  sedeId?: string
+}
+
 interface CrearUsuarioInput {
   email: string
   password: string
   nombre: string
   apellido: string
   telefono?: string | null
+  organizacionId?: string | null
 }
 
-async function getActorPermisos(usuario: any) {
+type ActorPermisos = {
+  esSuperAdmin: boolean
+  esAdmin: boolean
+  organizacionesAdmin: string[]
+  sedesAdmin: string[]
+}
+
+async function getActorPermisos(usuario: any): Promise<ActorPermisos> {
   const supabase = createServiceRoleClient()
 
   const esSuperAdmin = usuario.membresias?.some(
@@ -49,7 +63,7 @@ async function getActorPermisos(usuario: any) {
 
   const organizacionesAdminArray = Array.from(organizacionesAdmin)
 
-  let sedesAdmin = Array.from(new Set(sedesAdminDirectas))
+  let sedesAdmin: string[] = Array.from(new Set(sedesAdminDirectas))
 
   if (organizacionesAdminArray.length > 0) {
     const { data: sedesPorOrg } = await supabase
@@ -61,7 +75,7 @@ async function getActorPermisos(usuario: any) {
     sedesAdmin = Array.from(
       new Set([
         ...sedesAdmin,
-        ...(sedesPorOrg || []).map((s) => s.id),
+        ...(sedesPorOrg || []).map((s) => s.id).filter((id): id is string => !!id),
       ])
     )
   }
@@ -72,6 +86,45 @@ async function getActorPermisos(usuario: any) {
     organizacionesAdmin: organizacionesAdminArray,
     sedesAdmin,
   }
+}
+
+function getActorPrimaryOrganizacion(permisos: ActorPermisos): string | null {
+  return permisos.organizacionesAdmin[0] || null
+}
+
+async function upsertUsuarioPerfil(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  payloadBase: {
+    id: string
+    email: string
+    nombre: string
+    apellido: string
+    telefono?: string | null
+    activo: boolean
+  },
+  actorUsuarioId: string,
+  actorOrganizacionId: string | null
+) {
+  const payloadConScope = {
+    ...payloadBase,
+    created_by_usuario_id: actorUsuarioId,
+    created_by_organizacion_id: actorOrganizacionId,
+  }
+
+  const scopedResult = await supabase.from('usuarios').upsert(payloadConScope)
+  if (!scopedResult.error) return scopedResult
+
+  const mensaje = scopedResult.error.message || ''
+  const faltaColumna =
+    scopedResult.error.code === '42703' ||
+    mensaje.includes('created_by_usuario_id') ||
+    mensaje.includes('created_by_organizacion_id')
+
+  if (faltaColumna) {
+    return supabase.from('usuarios').upsert(payloadBase)
+  }
+
+  return scopedResult
 }
 
 export async function getUsuarios() {
@@ -105,8 +158,22 @@ export async function getUsuarios() {
         return { data: [], error: membershipsScopeError.message }
       }
 
+      let createdByOrgIds: string[] = []
+      const createdByOrgResult = await supabase
+        .from('usuarios')
+        .select('id')
+        .in('created_by_organizacion_id', organizacionesAdmin)
+
+      if (!createdByOrgResult.error) {
+        createdByOrgIds = (createdByOrgResult.data || []).map((u) => u.id)
+      }
+
       const userIds = Array.from(
-        new Set([usuario.id, ...((membershipsScope || []).map((m) => m.usuario_id).filter(Boolean))])
+        new Set([
+          usuario.id,
+          ...((membershipsScope || []).map((m) => m.usuario_id).filter(Boolean)),
+          ...createdByOrgIds,
+        ])
       )
 
       if (userIds.length === 0) {
@@ -314,6 +381,57 @@ export async function asignarRolUsuario(input: AsignarRolInput) {
   return { success: true }
 }
 
+export async function quitarRolUsuario(input: QuitarRolInput) {
+  const usuario = await getUser()
+
+  if (!usuario) {
+    return { error: 'No autenticado' }
+  }
+
+  const { esSuperAdmin, esAdmin, sedesAdmin } = await getActorPermisos(usuario)
+
+  if (!esSuperAdmin && !esAdmin) {
+    return { error: 'No autorizado. Solo admin o super admin pueden quitar roles.' }
+  }
+
+  if (input.rol === 'super_admin' && !esSuperAdmin) {
+    return { error: 'No autorizado. Solo super admin puede quitar ese rol.' }
+  }
+
+  const supabase = createServiceRoleClient()
+
+  if (input.rol !== 'super_admin' && !input.sedeId) {
+    return { error: 'Debes seleccionar una sede para quitar este rol.' }
+  }
+
+  if (input.rol !== 'super_admin' && !esSuperAdmin && !sedesAdmin.includes(input.sedeId!)) {
+    return { error: 'No autorizado para quitar roles en esa sede.' }
+  }
+
+  let query = supabase
+    .from('membresias')
+    .update({ activa: false, fecha_fin: new Date().toISOString().slice(0, 10) })
+    .eq('usuario_id', input.usuarioId)
+    .eq('rol', input.rol)
+    .eq('activa', true)
+
+  if (input.rol === 'super_admin') {
+    query = query.is('sede_id', null)
+  } else {
+    query = query.eq('sede_id', input.sedeId!)
+  }
+
+  const { error } = await query
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath('/super-admin/usuarios')
+  revalidatePath('/admin/usuarios')
+  return { success: true }
+}
+
 export async function actualizarEstadoUsuario(input: { usuarioId: string; activo: boolean }) {
   const usuario = await getUser()
 
@@ -390,13 +508,30 @@ export async function crearUsuario(input: CrearUsuarioInput) {
     return { error: 'No autenticado' }
   }
 
-  const { esSuperAdmin, esAdmin } = await getActorPermisos(usuario)
+  const permisos = await getActorPermisos(usuario)
+  const { esSuperAdmin, esAdmin } = permisos
 
   if (!esSuperAdmin && !esAdmin) {
     return { error: 'No autorizado. Solo admin o super admin pueden crear usuarios.' }
   }
 
+  if (esSuperAdmin && !input.organizacionId) {
+    return { error: 'Debes seleccionar un cliente para crear el usuario.' }
+  }
+
   const supabase = createServiceRoleClient()
+
+  if (input.organizacionId) {
+    const { data: orgExiste, error: orgError } = await supabase
+      .from('organizaciones')
+      .select('id')
+      .eq('id', input.organizacionId)
+      .single()
+
+    if (orgError || !orgExiste) {
+      return { error: 'Cliente no valido.' }
+    }
+  }
 
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
     email: input.email,
@@ -408,14 +543,22 @@ export async function crearUsuario(input: CrearUsuarioInput) {
     return { error: createError?.message || 'No se pudo crear el usuario en autenticacion.' }
   }
 
-  const { error: profileError } = await supabase.from('usuarios').upsert({
-    id: created.user.id,
-    email: input.email,
-    nombre: input.nombre,
-    apellido: input.apellido,
-    telefono: input.telefono || null,
-    activo: true,
-  })
+  const actorOrganizacionId = esSuperAdmin
+    ? (input.organizacionId || null)
+    : getActorPrimaryOrganizacion(permisos)
+  const { error: profileError } = await upsertUsuarioPerfil(
+    supabase,
+    {
+      id: created.user.id,
+      email: input.email,
+      nombre: input.nombre,
+      apellido: input.apellido,
+      telefono: input.telefono || null,
+      activo: true,
+    },
+    usuario.id,
+    actorOrganizacionId
+  )
 
   if (profileError) {
     await supabase.auth.admin.deleteUser(created.user.id)
@@ -457,7 +600,8 @@ export async function eliminarUsuario(usuarioId: string) {
 }
 
 export async function importarUsuarios(
-  rows: Array<{ nombre?: string; apellido?: string; email?: string; telefono?: string }>
+  rows: Array<{ nombre?: string; apellido?: string; email?: string; telefono?: string }>,
+  organizacionId?: string
 ) {
   const usuario = await getUser()
 
@@ -465,11 +609,21 @@ export async function importarUsuarios(
     return { error: 'No autenticado', created: 0, skipped: 0, errors: [] as string[] }
   }
 
-  const { esSuperAdmin } = await getActorPermisos(usuario)
+  const permisos = await getActorPermisos(usuario)
+  const { esSuperAdmin, esAdmin } = permisos
 
-  if (!esSuperAdmin) {
+  if (!esSuperAdmin && !esAdmin) {
     return {
-      error: 'No autorizado. Solo super admin puede importar usuarios.',
+      error: 'No autorizado. Solo admin o super admin pueden importar usuarios.',
+      created: 0,
+      skipped: 0,
+      errors: [] as string[],
+    }
+  }
+
+  if (esSuperAdmin && !organizacionId) {
+    return {
+      error: 'Debes seleccionar un cliente para importar usuarios.',
       created: 0,
       skipped: 0,
       errors: [] as string[],
@@ -481,6 +635,26 @@ export async function importarUsuarios(
   }
 
   const supabase = createServiceRoleClient()
+  const actorOrganizacionId = esSuperAdmin
+    ? (organizacionId || null)
+    : getActorPrimaryOrganizacion(permisos)
+
+  if (actorOrganizacionId) {
+    const { data: orgExiste, error: orgError } = await supabase
+      .from('organizaciones')
+      .select('id')
+      .eq('id', actorOrganizacionId)
+      .single()
+
+    if (orgError || !orgExiste) {
+      return {
+        error: 'Cliente no valido para importacion.',
+        created: 0,
+        skipped: 0,
+        errors: [] as string[],
+      }
+    }
+  }
   let created = 0
   let skipped = 0
   const errors: string[] = []
@@ -526,14 +700,19 @@ export async function importarUsuarios(
         continue
       }
 
-      const { error: profileError } = await supabase.from('usuarios').upsert({
-        id: authUserId,
-        email,
-        nombre,
-        apellido,
-        telefono: telefono || null,
-        activo: true,
-      })
+      const { error: profileError } = await upsertUsuarioPerfil(
+        supabase,
+        {
+          id: authUserId,
+          email,
+          nombre,
+          apellido,
+          telefono: telefono || null,
+          activo: true,
+        },
+        usuario.id,
+        actorOrganizacionId
+      )
 
       if (profileError) {
         skipped++
@@ -549,6 +728,7 @@ export async function importarUsuarios(
   }
 
   revalidatePath('/super-admin/usuarios')
+  revalidatePath('/admin/usuarios')
 
   return {
     success: true,

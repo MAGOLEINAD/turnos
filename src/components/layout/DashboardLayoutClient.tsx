@@ -11,10 +11,11 @@ import { Navbar } from '@/components/layout/Navbar'
 
 interface DashboardLayoutClientProps {
   usuario: any
+  sedes?: Array<{ id: string; nombre: string }>
   children: React.ReactNode
 }
 
-export function DashboardLayoutClient({ usuario, children }: DashboardLayoutClientProps) {
+export function DashboardLayoutClient({ usuario, sedes = [], children }: DashboardLayoutClientProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
@@ -34,6 +35,7 @@ export function DashboardLayoutClient({ usuario, children }: DashboardLayoutClie
       <div className="flex-1 flex flex-col overflow-hidden">
         <Navbar
           usuario={usuario}
+          sedes={sedes}
           onMenuClick={() => setMobileMenuOpen(true)}
         />
         <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">

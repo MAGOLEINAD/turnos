@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { ProfesoresList } from '@/components/profesores/ProfesoresList'
 import { obtenerProfesores } from '@/lib/actions/profesores.actions'
 import { getAdminSedeContext } from '@/lib/actions/admin-context.actions'
-import { Button } from '@/components/ui/button'
+import { SedeContextSelector } from '@/components/sedes/SedeContextSelector'
 
 interface AdminProfesoresPageProps {
   searchParams?: {
@@ -35,17 +35,12 @@ export default async function AdminProfesoresPage({ searchParams }: AdminProfeso
   }
 
   const sedesDisponibles = ctx.sedes
-  const sedeSeleccionada = ctx.sedeSeleccionada
+  // Si no hay parámetro sede, obtener profesores de todas las sedes
+  const sedeSeleccionada = searchParams?.sede || null
 
-  if (!sedeSeleccionada) {
-    return (
-      <div className="py-12 text-center">
-        <p className="text-muted-foreground">No hay sedes disponibles para este cliente.</p>
-      </div>
-    )
-  }
-
-  const result = await obtenerProfesores(sedeSeleccionada)
+  const result = sedeSeleccionada
+    ? await obtenerProfesores(sedeSeleccionada)
+    : await obtenerProfesores(null) // null = todas las sedes del admin
 
   if (result.error) {
     return (
@@ -65,30 +60,14 @@ export default async function AdminProfesoresPage({ searchParams }: AdminProfeso
           </p>
         </div>
 
-        <form className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="w-full sm:max-w-sm">
-            <label htmlFor="sede" className="text-sm font-medium">
-              Sede
-            </label>
-            <select
-              id="sede"
-              name="sede"
-              defaultValue={sedeSeleccionada}
-              className="mt-1 w-full rounded-md border px-3 py-2"
-              disabled={sedesDisponibles.length <= 1}
-            >
-              {sedesDisponibles.map((sede) => (
-                <option key={sede.id} value={sede.id}>
-                  {sede.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <Button type="submit">Ver sede</Button>
-        </form>
+        <SedeContextSelector sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada} />
       </div>
 
-      <ProfesoresList profesores={result.data || []} sedeId={sedeSeleccionada} />
+      <ProfesoresList
+        profesores={result.data || []}
+        sedeId={sedeSeleccionada || sedesDisponibles[0]?.id}
+        sedes={sedesDisponibles.map((sede) => ({ id: sede.id, nombre: sede.nombre }))}
+      />
     </div>
   )
 }

@@ -16,7 +16,9 @@ export default async function ProfesorCalendarioPage() {
     .from('profesores')
     .select('id, sede_id')
     .eq('usuario_id', usuario.id)
-    .single()
+    .eq('activo', true)
+    .limit(1)
+    .maybeSingle()
 
   if (!profesor) {
     return (

@@ -4,7 +4,7 @@
 
 'use client'
 
-import { LogOut, Menu } from 'lucide-react'
+import { LogOut, Menu, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -15,15 +15,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { logout } from '@/lib/actions/auth.actions'
-import { ROLES_LABELS } from '@/lib/constants/roles'
+import { ROLES_ICONS, ROLES_LABELS, type RolUsuario } from '@/lib/constants/roles'
 
 interface NavbarProps {
   usuario: any
+  sedes?: Array<{ id: string; nombre: string }>
   onMenuClick?: () => void
 }
 
-export function Navbar({ usuario, onMenuClick }: NavbarProps) {
-  const rol = usuario?.membresias?.[0]?.rol
+export function Navbar({ usuario, sedes = [], onMenuClick }: NavbarProps) {
+  const rol = usuario?.membresias?.[0]?.rol as RolUsuario | undefined
+  const rolLabel = rol ? `${ROLES_ICONS[rol]} ${ROLES_LABELS[rol]}` : 'Sin rol'
+
+  // Mostrar la primera sede como título principal
+  const sedePrincipal = sedes.length > 0 ? sedes[0].nombre : 'Dashboard'
 
   return (
     <header className="h-16 border-b border-gray-200 bg-white flex items-center justify-between px-4 md:px-6">
@@ -39,7 +44,10 @@ export function Navbar({ usuario, onMenuClick }: NavbarProps) {
             <Menu className="h-6 w-6" />
           </Button>
         )}
-        <h2 className="text-lg font-semibold">Dashboard</h2>
+        <div className="flex items-center gap-2">
+          {sedes.length > 0 && <MapPin className="h-4 w-4 text-muted-foreground" />}
+          <h2 className="text-lg font-semibold">{sedePrincipal}</h2>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
@@ -55,7 +63,7 @@ export function Navbar({ usuario, onMenuClick }: NavbarProps) {
                   {usuario?.nombre} {usuario?.apellido}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {rol ? ROLES_LABELS[rol] : 'Sin rol'}
+                  {rolLabel}
                 </div>
               </div>
             </Button>

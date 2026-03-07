@@ -11,6 +11,16 @@ type ActorScope = {
   organizacionesAdmin: string[]
 }
 
+function safeRevalidate(...paths: string[]) {
+  for (const path of paths) {
+    try {
+      revalidatePath(path)
+    } catch (error) {
+      console.warn('[alumnos.actions] No se pudo revalidar path:', path)
+    }
+  }
+}
+
 async function getActorScope(): Promise<{ scope: ActorScope | null; error?: string }> {
   const usuario = await getUser()
   if (!usuario) return { scope: null, error: 'No autenticado' }
@@ -127,8 +137,7 @@ export async function crearAlumno(data: AlumnoInput) {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/admin/alumnos')
-  revalidatePath('/super-admin/alumnos')
+  safeRevalidate('/admin/alumnos', '/super-admin/alumnos')
   return { data: alumno }
 }
 
@@ -275,9 +284,7 @@ export async function actualizarAlumno(id: string, data: Partial<AlumnoInput>) {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/admin/alumnos')
-  revalidatePath('/super-admin/alumnos')
-  revalidatePath('/alumno/perfil')
+  safeRevalidate('/admin/alumnos', '/super-admin/alumnos', '/alumno/perfil')
   return { data: alumno }
 }
 
@@ -309,8 +316,7 @@ export async function desactivarAlumno(id: string) {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/admin/alumnos')
-  revalidatePath('/super-admin/alumnos')
+  safeRevalidate('/admin/alumnos', '/super-admin/alumnos')
   return { success: true }
 }
 
@@ -342,8 +348,7 @@ export async function activarAlumno(id: string) {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/admin/alumnos')
-  revalidatePath('/super-admin/alumnos')
+  safeRevalidate('/admin/alumnos', '/super-admin/alumnos')
   return { success: true }
 }
 
@@ -364,23 +369,41 @@ export async function obtenerUsuariosDisponiblesParaAlumnos(sedeId: string) {
     .select('usuario_id')
     .eq('sede_id', sedeId)
 
-  const usuariosAlumnos = (alumnos || []).map((a) => a.usuario_id)
+  const idsAlumnoEnSede = new Set((alumnos || []).map((a) => a.usuario_id).filter(Boolean))
 
-  let query = supabase.from('usuarios').select(
-    `
+  const { data: membresiasAlumno, error: membresiasError } = await supabase
+    .from('membresias')
+    .select('usuario_id')
+    .eq('rol', 'alumno')
+    .eq('activa', true)
+    .eq('sede_id', sedeId)
+
+  if (membresiasError) return { error: membresiasError.message }
+
+  const idsConRolAlumno = Array.from(
+    new Set((membresiasAlumno || []).map((m) => m.usuario_id).filter(Boolean))
+  ) as string[]
+
+  const idsDisponibles = idsConRolAlumno.filter((id) => !idsAlumnoEnSede.has(id))
+
+  if (idsDisponibles.length === 0) {
+    return { data: [] }
+  }
+
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select(
+      `
       id,
       email,
       nombre,
       apellido,
       telefono
     `
-  )
-
-  if (usuariosAlumnos.length > 0) {
-    query = query.not('id', 'in', `(${usuariosAlumnos.join(',')})`)
-  }
-
-  const { data, error } = await query
+    )
+    .in('id', idsDisponibles)
+    .order('nombre', { ascending: true })
+    .order('apellido', { ascending: true })
 
   if (error) return { error: error.message }
   return { data }

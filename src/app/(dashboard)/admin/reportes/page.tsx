@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation'
-import { getUser } from '@/lib/actions/auth.actions'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { getAdminSedeContext } from '@/lib/actions/admin-context.actions'
 
 interface AdminReportesPageProps {
   searchParams?: {
@@ -11,70 +11,28 @@ interface AdminReportesPageProps {
 }
 
 export default async function AdminReportesPage({ searchParams }: AdminReportesPageProps) {
-  const usuario = await getUser()
-
-  if (!usuario) {
+  const ctx = await getAdminSedeContext(searchParams?.sede)
+  if (!ctx.usuario) {
     redirect('/login')
   }
 
-  const supabase = createServiceRoleClient()
-  const esSuperAdmin = usuario.membresias?.some((m: any) => m.rol === 'super_admin' && m.activa)
-
-  let sedesDisponibles: Array<{ id: string; nombre: string }> = []
-  let sedeSeleccionada = searchParams?.sede || ''
-
-  if (esSuperAdmin) {
-    const { data: sedes } = await supabase
-      .from('sedes')
-      .select('id, nombre')
-      .order('nombre', { ascending: true })
-
-    sedesDisponibles = sedes || []
-    if (!sedeSeleccionada && sedesDisponibles.length > 0) {
-      sedeSeleccionada = sedesDisponibles[0].id
-    }
-  } else {
-    const { data: memberships } = await supabase
-      .from('membresias')
-      .select('organizacion_id')
-      .eq('usuario_id', usuario.id)
-      .eq('rol', 'admin')
-      .eq('activa', true)
-
-    const orgIdsSet = new Set<string>(
-      (memberships || []).map((m: any) => m.organizacion_id).filter(Boolean)
+  if (ctx.error) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-destructive">Error: {ctx.error}</p>
+      </div>
     )
+  }
 
-    const { data: orgsComoAdminUsuario } = await supabase
-      .from('organizaciones')
-      .select('id')
-      .eq('admin_usuario_id', usuario.id)
+  const sedesDisponibles = ctx.sedes
+  const sedeSeleccionada = ctx.sedeSeleccionada
 
-    for (const org of orgsComoAdminUsuario || []) {
-      if (org.id) orgIdsSet.add(org.id)
-    }
-
-    const orgIds = Array.from(orgIdsSet)
-
-    if (orgIds.length === 0) {
-      return (
-        <div className="py-12 text-center">
-          <p className="text-muted-foreground">No tienes permisos de admin para una sede.</p>
-        </div>
-      )
-    }
-
-    const { data: sedes } = await supabase
-      .from('sedes')
-      .select('id, nombre')
-      .in('organizacion_id', orgIds)
-      .eq('activa', true)
-      .order('nombre', { ascending: true })
-
-    sedesDisponibles = sedes || []
-    if (!sedeSeleccionada && sedesDisponibles.length > 0) {
-      sedeSeleccionada = sedesDisponibles[0].id
-    }
+  if (sedesDisponibles.length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-muted-foreground">No tienes permisos de admin para una sede.</p>
+      </div>
+    )
   }
 
   if (!sedeSeleccionada) {
@@ -84,6 +42,8 @@ export default async function AdminReportesPage({ searchParams }: AdminReportesP
       </div>
     )
   }
+
+  const supabase = createServiceRoleClient()
 
   const inicioMes = new Date()
   inicioMes.setDate(1)

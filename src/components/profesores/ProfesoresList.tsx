@@ -13,9 +13,10 @@ import { Edit, UserX, UserCheck, Mail, Phone } from 'lucide-react'
 interface ProfesoresListProps {
   profesores: any[]
   sedeId: string
+  sedes: Array<{ id: string; nombre: string }>
 }
 
-export function ProfesoresList({ profesores: profesoresIniciales, sedeId }: ProfesoresListProps) {
+export function ProfesoresList({ profesores: profesoresIniciales, sedeId, sedes }: ProfesoresListProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [profesorEditar, setProfesorEditar] = useState<any>(null)
   const [profesores, setProfesores] = useState(profesoresIniciales)
@@ -201,6 +202,7 @@ export function ProfesoresList({ profesores: profesoresIniciales, sedeId }: Prof
         onOpenChange={setModalOpen}
         profesor={profesorEditar}
         sedeId={sedeId}
+        sedes={sedes}
         onSuccess={handleSuccess}
       />
     </>

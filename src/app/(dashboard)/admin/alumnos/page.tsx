@@ -1,9 +1,8 @@
 import { redirect } from 'next/navigation'
 import { AlumnosList } from '@/components/alumnos/AlumnosList'
 import { obtenerAlumnos } from '@/lib/actions/alumnos.actions'
-import { getUser } from '@/lib/actions/auth.actions'
-import { createServiceRoleClient } from '@/lib/supabase/server'
-import { Button } from '@/components/ui/button'
+import { getAdminSedeContext } from '@/lib/actions/admin-context.actions'
+import { SedeContextSelector } from '@/components/sedes/SedeContextSelector'
 
 interface AdminAlumnosPageProps {
   searchParams?: {
@@ -12,37 +11,20 @@ interface AdminAlumnosPageProps {
 }
 
 export default async function AdminAlumnosPage({ searchParams }: AdminAlumnosPageProps) {
-  const usuario = await getUser()
-
-  if (!usuario) {
+  const ctx = await getAdminSedeContext(searchParams?.sede)
+  if (!ctx.usuario) {
     redirect('/login')
   }
 
-  const supabase = createServiceRoleClient()
-
-  const { data: memberships } = await supabase
-    .from('membresias')
-    .select('sede_id, organizacion_id')
-    .eq('usuario_id', usuario.id)
-    .eq('rol', 'admin')
-    .eq('activa', true)
-
-  const orgIdsSet = new Set<string>(
-    (memberships || []).map((m: any) => m.organizacion_id).filter(Boolean)
-  )
-
-  const { data: orgsComoAdminUsuario } = await supabase
-    .from('organizaciones')
-    .select('id')
-    .eq('admin_usuario_id', usuario.id)
-
-  for (const org of orgsComoAdminUsuario || []) {
-    if (org.id) orgIdsSet.add(org.id)
+  if (ctx.error) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-destructive">Error: {ctx.error}</p>
+      </div>
+    )
   }
 
-  const orgIds = Array.from(orgIdsSet)
-
-  if (orgIds.length === 0) {
+  if (ctx.sedes.length === 0) {
     return (
       <div className="py-12 text-center">
         <p className="text-muted-foreground">
@@ -52,27 +34,13 @@ export default async function AdminAlumnosPage({ searchParams }: AdminAlumnosPag
     )
   }
 
-  const { data: sedes } = await supabase
-    .from('sedes')
-    .select('id, nombre, organizacion_id')
-    .in('organizacion_id', orgIds)
-    .eq('activa', true)
-    .order('nombre', { ascending: true })
+  const sedesDisponibles = ctx.sedes
+  // Si no hay parámetro sede, obtener alumnos de todas las sedes
+  const sedeSeleccionada = searchParams?.sede || null
 
-  const sedesDisponibles = sedes || []
-  const sedeSeleccionada =
-    (searchParams?.sede && sedesDisponibles.find((s) => s.id === searchParams.sede)?.id) ||
-    sedesDisponibles[0]?.id
-
-  if (!sedeSeleccionada) {
-    return (
-      <div className="py-12 text-center">
-        <p className="text-muted-foreground">No hay sedes disponibles para este cliente.</p>
-      </div>
-    )
-  }
-
-  const result = await obtenerAlumnos(sedeSeleccionada)
+  const result = sedeSeleccionada
+    ? await obtenerAlumnos(sedeSeleccionada)
+    : await obtenerAlumnos(null) // null = todas las sedes del admin
 
   if (result.error) {
     return (
@@ -92,30 +60,10 @@ export default async function AdminAlumnosPage({ searchParams }: AdminAlumnosPag
           </p>
         </div>
 
-        <form className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="w-full sm:max-w-sm">
-            <label htmlFor="sede" className="text-sm font-medium">
-              Sede
-            </label>
-            <select
-              id="sede"
-              name="sede"
-              defaultValue={sedeSeleccionada}
-              className="mt-1 w-full rounded-md border px-3 py-2"
-              disabled={sedesDisponibles.length <= 1}
-            >
-              {sedesDisponibles.map((sede) => (
-                <option key={sede.id} value={sede.id}>
-                  {sede.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <Button type="submit">Ver sede</Button>
-        </form>
+        <SedeContextSelector sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada} />
       </div>
 
-      <AlumnosList alumnos={result.data || []} sedeId={sedeSeleccionada} />
+      <AlumnosList alumnos={result.data || []} sedeId={sedeSeleccionada || sedesDisponibles[0]?.id} />
     </div>
   )
 }

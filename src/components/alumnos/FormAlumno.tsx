@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { StatusAlert } from '@/components/ui/status-alert'
 
 interface FormAlumnoProps {
   open: boolean
@@ -64,6 +65,11 @@ export function FormAlumno({
     setLoadingUsuarios(true)
     try {
       const result = await obtenerUsuariosDisponiblesParaAlumnos(sedeId)
+      if (result.error) {
+        toast.error(result.error)
+        setUsuarios([])
+        return
+      }
       if (result.data) {
         setUsuarios(result.data)
       }
@@ -126,9 +132,15 @@ export function FormAlumno({
               {loadingUsuarios ? (
                 <p className="text-sm text-muted-foreground">Cargando usuarios...</p>
               ) : usuarios.length === 0 ? (
-                <p className="text-sm text-orange-600">
-                  No hay usuarios disponibles. Todos los usuarios ya son alumnos de esta sede.
-                </p>
+                <StatusAlert
+                  variant="warning"
+                  title="Sin usuarios disponibles"
+                  description="No hay usuarios con rol alumno disponibles en esta sede. Asigna primero el rol alumno desde la sección de Usuarios."
+                  action={{
+                    label: 'Ir a Usuarios',
+                    href: '/super-admin/usuarios'
+                  }}
+                />
               ) : (
                 <Select
                   onValueChange={(value) => setValue('usuario_id', value)}
@@ -165,31 +177,33 @@ export function FormAlumno({
             )}
           </div>
 
-          {/* Contacto de Emergencia */}
-          <div className="space-y-2">
-            <Label htmlFor="contacto_emergencia">Contacto de Emergencia</Label>
-            <Input
-              id="contacto_emergencia"
-              placeholder="Nombre del contacto de emergencia"
-              {...register('contacto_emergencia')}
-            />
-            {errors.contacto_emergencia && (
-              <p className="text-sm text-destructive">{errors.contacto_emergencia.message}</p>
-            )}
-          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Telefono de Emergencia */}
+            <div className="space-y-2">
+              <Label htmlFor="telefono_emergencia">Telefono</Label>
+              <Input
+                id="telefono_emergencia"
+                type="tel"
+                placeholder="+54 9 11 xxxx-xxxx"
+                {...register('telefono_emergencia')}
+              />
+              {errors.telefono_emergencia && (
+                <p className="text-sm text-destructive">{errors.telefono_emergencia.message}</p>
+              )}
+            </div>
 
-          {/* Teléfono de Emergencia */}
-          <div className="space-y-2">
-            <Label htmlFor="telefono_emergencia">Teléfono de Emergencia</Label>
-            <Input
-              id="telefono_emergencia"
-              type="tel"
-              placeholder="+54 9 11 xxxx-xxxx"
-              {...register('telefono_emergencia')}
-            />
-            {errors.telefono_emergencia && (
-              <p className="text-sm text-destructive">{errors.telefono_emergencia.message}</p>
-            )}
+            {/* Contacto de Emergencia */}
+            <div className="space-y-2">
+              <Label htmlFor="contacto_emergencia">Contacto de Emergencia</Label>
+              <Input
+                id="contacto_emergencia"
+                placeholder="Nombre del contacto de emergencia"
+                {...register('contacto_emergencia')}
+              />
+              {errors.contacto_emergencia && (
+                <p className="text-sm text-destructive">{errors.contacto_emergencia.message}</p>
+              )}
+            </div>
           </div>
 
           {/* Notas Médicas */}
