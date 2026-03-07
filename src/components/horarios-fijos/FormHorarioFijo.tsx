@@ -5,10 +5,15 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { crearHorarioFijo } from '@/lib/actions/horarios-fijos.actions'
-import { obtenerProfesores } from '@/lib/actions/profesores.actions'
-import { obtenerAlumnos } from '@/lib/actions/alumnos.actions'
+import { useProfesores } from '@/hooks/useProfesores'
+import { useAlumnos } from '@/hooks/useAlumnos'
 import { horarioFijoSchema, type HorarioFijoInput } from '@/lib/validations/horario-fijo.schema'
-import { FRECUENCIA_HORARIO, FRECUENCIA_HORARIO_LABELS, DIA_SEMANA, DIA_SEMANA_LABELS } from '@/lib/constants/estados'
+import {
+  FRECUENCIA_HORARIO,
+  FRECUENCIA_HORARIO_LABELS,
+  DIA_SEMANA,
+  DIA_SEMANA_LABELS,
+} from '@/lib/constants/estados'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +29,22 @@ interface FormHorarioFijoProps {
   onSuccess?: () => void
 }
 
+interface ProfesorSelectItem {
+  id: string
+  usuarios?: {
+    nombre?: string
+    apellido?: string
+  } | null
+}
+
+interface AlumnoSelectItem {
+  id: string
+  usuarios?: {
+    nombre?: string
+    apellido?: string
+  } | null
+}
+
 export function FormHorarioFijo({
   open,
   onOpenChange,
@@ -33,9 +54,12 @@ export function FormHorarioFijo({
   onSuccess,
 }: FormHorarioFijoProps) {
   const [loading, setLoading] = useState(false)
-  const [profesores, setProfesores] = useState<any[]>([])
-  const [alumnos, setAlumnos] = useState<any[]>([])
   const [frecuencia, setFrecuencia] = useState<string>(FRECUENCIA_HORARIO.SEMANAL_1)
+
+  const { data: profesores = [], error: errorProfesores } = useProfesores(sedeId)
+  const { data: alumnos = [], error: errorAlumnos } = useAlumnos(sedeId)
+  const profesoresList = profesores as ProfesorSelectItem[]
+  const alumnosList = alumnos as AlumnoSelectItem[]
 
   const {
     register,
@@ -58,31 +82,15 @@ export function FormHorarioFijo({
   })
 
   useEffect(() => {
-    if (open) {
-      cargarProfesoresYAlumnos()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
-
-  const cargarProfesoresYAlumnos = async () => {
-    try {
-      const [profResult, alumResult] = await Promise.all([
-        obtenerProfesores(sedeId),
-        obtenerAlumnos(sedeId),
-      ])
-
-      if (profResult.data) setProfesores(profResult.data)
-      if (alumResult.data) setAlumnos(alumResult.data)
-    } catch (error) {
+    if (errorProfesores || errorAlumnos) {
       toast.error('Error al cargar datos')
     }
-  }
+  }, [errorProfesores, errorAlumnos])
 
   const onSubmit = async (data: HorarioFijoInput) => {
     setLoading(true)
     try {
       const result = await crearHorarioFijo(data)
-
       if (result.error) {
         toast.error(result.error)
       } else {
@@ -91,7 +99,7 @@ export function FormHorarioFijo({
         onOpenChange(false)
         onSuccess?.()
       }
-    } catch (error) {
+    } catch {
       toast.error('Error al crear el horario fijo')
     } finally {
       setLoading(false)
@@ -108,14 +116,11 @@ export function FormHorarioFijo({
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nuevo Horario Fijo</DialogTitle>
-          <DialogDescription>
-            Crea un horario recurrente para un alumno
-          </DialogDescription>
+          <DialogDescription>Crea un horario recurrente para un alumno</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Profesor */}
-          {!profesorId && (
+          {!profesorId ? (
             <div className="space-y-2">
               <Label htmlFor="profesor_id">Profesor *</Label>
               <Select
@@ -126,21 +131,20 @@ export function FormHorarioFijo({
                   <SelectValue placeholder="Selecciona un profesor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {profesores.map((profesor) => (
+                  {profesoresList.map((profesor) => (
                     <SelectItem key={profesor.id} value={profesor.id}>
-                      {profesor.usuarios.nombre} {profesor.usuarios.apellido}
+                      {profesor.usuarios?.nombre || 'Sin nombre'} {profesor.usuarios?.apellido || ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.profesor_id && (
+              {errors.profesor_id ? (
                 <p className="text-sm text-destructive">{errors.profesor_id.message}</p>
-              )}
+              ) : null}
             </div>
-          )}
+          ) : null}
 
-          {/* Alumno */}
-          {!alumnoId && (
+          {!alumnoId ? (
             <div className="space-y-2">
               <Label htmlFor="alumno_id">Alumno *</Label>
               <Select
@@ -151,20 +155,19 @@ export function FormHorarioFijo({
                   <SelectValue placeholder="Selecciona un alumno" />
                 </SelectTrigger>
                 <SelectContent>
-                  {alumnos.map((alumno) => (
+                  {alumnosList.map((alumno) => (
                     <SelectItem key={alumno.id} value={alumno.id}>
-                      {alumno.usuarios.nombre} {alumno.usuarios.apellido}
+                      {alumno.usuarios?.nombre || 'Sin nombre'} {alumno.usuarios?.apellido || ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.alumno_id && (
+              {errors.alumno_id ? (
                 <p className="text-sm text-destructive">{errors.alumno_id.message}</p>
-              )}
+              ) : null}
             </div>
-          )}
+          ) : null}
 
-          {/* Frecuencia */}
           <div className="space-y-2">
             <Label htmlFor="frecuencia">Frecuencia *</Label>
             <Select value={frecuencia} onValueChange={handleFrecuenciaChange}>
@@ -183,20 +186,19 @@ export function FormHorarioFijo({
                 </SelectItem>
               </SelectContent>
             </Select>
-            {errors.frecuencia && (
+            {errors.frecuencia ? (
               <p className="text-sm text-destructive">{errors.frecuencia.message}</p>
-            )}
+            ) : null}
           </div>
 
-          {/* Día 1 */}
           <div className="space-y-2">
-            <Label htmlFor="dia_semana_1">Día de la Semana *</Label>
+            <Label htmlFor="dia_semana_1">Dia de la semana *</Label>
             <Select
               onValueChange={(value) => setValue('dia_semana_1', value as any)}
               defaultValue={watch('dia_semana_1')}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Selecciona el día" />
+                <SelectValue placeholder="Selecciona el dia" />
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(DIA_SEMANA_LABELS).map(([key, label]) => (
@@ -206,21 +208,21 @@ export function FormHorarioFijo({
                 ))}
               </SelectContent>
             </Select>
-            {errors.dia_semana_1 && (
+            {errors.dia_semana_1 ? (
               <p className="text-sm text-destructive">{errors.dia_semana_1.message}</p>
-            )}
+            ) : null}
           </div>
 
-          {/* Día 2 (solo si frecuencia >= 2) */}
-          {(frecuencia === FRECUENCIA_HORARIO.SEMANAL_2 || frecuencia === FRECUENCIA_HORARIO.SEMANAL_3) && (
+          {(frecuencia === FRECUENCIA_HORARIO.SEMANAL_2 ||
+            frecuencia === FRECUENCIA_HORARIO.SEMANAL_3) && (
             <div className="space-y-2">
-              <Label htmlFor="dia_semana_2">Segundo Día de la Semana *</Label>
+              <Label htmlFor="dia_semana_2">Segundo dia de la semana *</Label>
               <Select
                 onValueChange={(value) => setValue('dia_semana_2', value as any)}
                 defaultValue={watch('dia_semana_2')}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona el segundo día" />
+                  <SelectValue placeholder="Selecciona el segundo dia" />
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(DIA_SEMANA_LABELS).map(([key, label]) => (
@@ -230,22 +232,21 @@ export function FormHorarioFijo({
                   ))}
                 </SelectContent>
               </Select>
-              {errors.dia_semana_2 && (
+              {errors.dia_semana_2 ? (
                 <p className="text-sm text-destructive">{errors.dia_semana_2.message}</p>
-              )}
+              ) : null}
             </div>
           )}
 
-          {/* Día 3 (solo si frecuencia = 3) */}
           {frecuencia === FRECUENCIA_HORARIO.SEMANAL_3 && (
             <div className="space-y-2">
-              <Label htmlFor="dia_semana_3">Tercer Día de la Semana *</Label>
+              <Label htmlFor="dia_semana_3">Tercer dia de la semana *</Label>
               <Select
                 onValueChange={(value) => setValue('dia_semana_3', value as any)}
                 defaultValue={watch('dia_semana_3')}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona el tercer día" />
+                  <SelectValue placeholder="Selecciona el tercer dia" />
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(DIA_SEMANA_LABELS).map(([key, label]) => (
@@ -255,28 +256,22 @@ export function FormHorarioFijo({
                   ))}
                 </SelectContent>
               </Select>
-              {errors.dia_semana_3 && (
+              {errors.dia_semana_3 ? (
                 <p className="text-sm text-destructive">{errors.dia_semana_3.message}</p>
-              )}
+              ) : null}
             </div>
           )}
 
-          {/* Hora de Inicio */}
           <div className="space-y-2">
-            <Label htmlFor="hora_inicio">Hora de Inicio *</Label>
-            <Input
-              id="hora_inicio"
-              type="time"
-              {...register('hora_inicio')}
-            />
-            {errors.hora_inicio && (
+            <Label htmlFor="hora_inicio">Hora de inicio *</Label>
+            <Input id="hora_inicio" type="time" {...register('hora_inicio')} />
+            {errors.hora_inicio ? (
               <p className="text-sm text-destructive">{errors.hora_inicio.message}</p>
-            )}
+            ) : null}
           </div>
 
-          {/* Duración */}
           <div className="space-y-2">
-            <Label htmlFor="duracion_minutos">Duración (minutos) *</Label>
+            <Label htmlFor="duracion_minutos">Duracion (minutos) *</Label>
             <Input
               id="duracion_minutos"
               type="number"
@@ -285,28 +280,20 @@ export function FormHorarioFijo({
               step={15}
               {...register('duracion_minutos', { valueAsNumber: true })}
             />
-            {errors.duracion_minutos && (
+            {errors.duracion_minutos ? (
               <p className="text-sm text-destructive">{errors.duracion_minutos.message}</p>
-            )}
+            ) : null}
           </div>
 
-          {/* Fecha de Inicio de Vigencia */}
           <div className="space-y-2">
-            <Label htmlFor="fecha_inicio_vigencia">Inicio de Vigencia *</Label>
-            <Input
-              id="fecha_inicio_vigencia"
-              type="date"
-              {...register('fecha_inicio_vigencia')}
-            />
-            {errors.fecha_inicio_vigencia && (
+            <Label htmlFor="fecha_inicio_vigencia">Inicio de vigencia *</Label>
+            <Input id="fecha_inicio_vigencia" type="date" {...register('fecha_inicio_vigencia')} />
+            {errors.fecha_inicio_vigencia ? (
               <p className="text-sm text-destructive">{errors.fecha_inicio_vigencia.message}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Desde qué fecha se aplica este horario fijo
-            </p>
+            ) : null}
+            <p className="text-xs text-muted-foreground">Desde que fecha se aplica este horario fijo</p>
           </div>
 
-          {/* Botones */}
           <div className="flex justify-end gap-2 pt-4">
             <Button
               type="button"

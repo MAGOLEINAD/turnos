@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { obtenerCreditosAlumno } from '@/lib/actions/alumnos.actions'
+import { useEffect } from 'react'
+import { useCreditosAlumno } from '@/hooks/useAlumnos'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -14,58 +14,56 @@ interface CreditosAlumnoProps {
   sedeId?: string
 }
 
+interface CreditoItem {
+  id: string
+  utilizado: boolean
+  fecha_expiracion: string
+  fecha_generacion: string
+  fecha_utilizacion?: string | null
+  motivo?: string | null
+}
+
 export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
-  const [creditos, setCreditos] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: creditos = [], isLoading: loading, error } = useCreditosAlumno(alumnoId, sedeId)
+  const creditosList = creditos as CreditoItem[]
 
   useEffect(() => {
-    cargarCreditos()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alumnoId, sedeId])
-
-  const cargarCreditos = async () => {
-    setLoading(true)
-    try {
-      const result = await obtenerCreditosAlumno(alumnoId, sedeId)
-
-      if (result.error) {
-        toast.error(result.error)
-        setCreditos([])
-      } else {
-        setCreditos(result.data || [])
-      }
-    } catch (error) {
-      toast.error('Error al cargar créditos')
-      setCreditos([])
-    } finally {
-      setLoading(false)
+    if (error) {
+      toast.error('Error al cargar creditos')
     }
-  }
+  }, [error])
 
-  const creditosDisponibles = creditos.filter((c) => !c.utilizado && new Date(c.fecha_expiracion) > new Date())
-  const creditosExpirados = creditos.filter((c) => !c.utilizado && new Date(c.fecha_expiracion) <= new Date())
-  const creditosUtilizados = creditos.filter((c) => c.utilizado)
+  const creditosDisponibles = creditosList.filter(
+    (c) => !c.utilizado && new Date(c.fecha_expiracion) > new Date()
+  )
+  const creditosExpirados = creditosList.filter(
+    (c) => !c.utilizado && new Date(c.fecha_expiracion) <= new Date()
+  )
+  const creditosUtilizados = creditosList.filter((c) => c.utilizado)
 
   const diasParaExpirar = (fechaExpiracion: string) => {
-    const dias = diferenciaEnDias(new Date(fechaExpiracion), new Date())
-    return dias
+    return diferenciaEnDias(new Date(fechaExpiracion), new Date())
   }
 
   const getBadgeExpiracion = (dias: number) => {
     if (dias <= 7) {
-      return <Badge variant="destructive">Expira en {dias} {dias === 1 ? 'día' : 'días'}</Badge>
-    } else if (dias <= 30) {
-      return <Badge className="bg-orange-500">Expira en {dias} días</Badge>
-    } else {
-      return <Badge variant="outline">Expira en {dias} días</Badge>
+      return (
+        <Badge variant="destructive">
+          Expira en {dias} {dias === 1 ? 'dia' : 'dias'}
+        </Badge>
+      )
     }
+    if (dias <= 30) {
+      return <Badge className="bg-orange-500">Expira en {dias} dias</Badge>
+    }
+    return <Badge variant="outline">Expira en {dias} dias</Badge>
   }
 
   if (loading) {
     return (
       <Card>
         <CardContent className="py-12">
-          <p className="text-center text-muted-foreground">Cargando créditos...</p>
+          <p className="text-center text-muted-foreground">Cargando creditos...</p>
         </CardContent>
       </Card>
     )
@@ -73,16 +71,13 @@ export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
 
   return (
     <div className="space-y-6">
-      {/* Resumen */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-green-600" />
-            Mis Créditos
+            Mis Creditos
           </CardTitle>
-          <CardDescription>
-            Créditos generados por cancelaciones con anticipación
-          </CardDescription>
+          <CardDescription>Creditos generados por cancelaciones con anticipacion</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 gap-4 text-center">
@@ -102,21 +97,19 @@ export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
         </CardContent>
       </Card>
 
-      {/* Info */}
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          Los créditos se generan cuando cancelas una reserva con al menos 24 horas de anticipación.
-          Son válidos por 90 días y pueden usarse en cualquier sede de la organización.
+          Los creditos se generan cuando cancelas una reserva con al menos 24 horas de anticipacion.
+          Son validos por 90 dias y pueden usarse en cualquier sede de la organizacion.
         </AlertDescription>
       </Alert>
 
-      {/* Créditos Disponibles */}
       {creditosDisponibles.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-green-600" />
-            Créditos Disponibles
+            Creditos Disponibles
           </h3>
           <div className="grid gap-3">
             {creditosDisponibles.map((credito) => {
@@ -138,9 +131,9 @@ export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
                             Expira: {formatDateTime(new Date(credito.fecha_expiracion))}
                           </p>
                         </div>
-                        {credito.motivo && (
+                        {credito.motivo ? (
                           <p className="text-xs text-muted-foreground">Motivo: {credito.motivo}</p>
-                        )}
+                        ) : null}
                       </div>
                       <div>{getBadgeExpiracion(dias)}</div>
                     </div>
@@ -152,12 +145,11 @@ export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
         </div>
       )}
 
-      {/* Créditos Expirados */}
       {creditosExpirados.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <XCircle className="h-5 w-5 text-orange-600" />
-            Créditos Expirados
+            Creditos Expirados
           </h3>
           <div className="grid gap-3 opacity-60">
             {creditosExpirados.map((credito) => (
@@ -174,7 +166,7 @@ export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-muted-foreground" />
                         <p className="text-sm text-muted-foreground">
-                          Expiró: {formatDateTime(new Date(credito.fecha_expiracion))}
+                          Expiro: {formatDateTime(new Date(credito.fecha_expiracion))}
                         </p>
                       </div>
                     </div>
@@ -187,12 +179,11 @@ export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
         </div>
       )}
 
-      {/* Créditos Utilizados */}
       {creditosUtilizados.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-blue-600" />
-            Créditos Utilizados
+            Creditos Utilizados
           </h3>
           <div className="grid gap-3 opacity-60">
             {creditosUtilizados.map((credito) => (
@@ -206,14 +197,14 @@ export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
                           Generado: {formatDateTime(new Date(credito.fecha_generacion))}
                         </p>
                       </div>
-                      {credito.fecha_utilizacion && (
+                      {credito.fecha_utilizacion ? (
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                           <p className="text-sm text-muted-foreground">
                             Utilizado: {formatDateTime(new Date(credito.fecha_utilizacion))}
                           </p>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                     <Badge className="bg-blue-500">Utilizado</Badge>
                   </div>
@@ -224,14 +215,14 @@ export function CreditosAlumno({ alumnoId, sedeId }: CreditosAlumnoProps) {
         </div>
       )}
 
-      {/* Sin créditos */}
-      {creditos.length === 0 && (
+      {creditosList.length === 0 && (
         <Card>
           <CardContent className="py-12">
             <div className="text-center">
               <CheckCircle2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">
-                No tienes créditos aún. Los créditos se generan cuando cancelas una reserva con anticipación.
+                No tienes creditos aun. Los creditos se generan cuando cancelas una reserva con
+                anticipacion.
               </p>
             </div>
           </CardContent>

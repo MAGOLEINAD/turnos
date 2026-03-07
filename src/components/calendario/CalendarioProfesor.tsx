@@ -60,9 +60,15 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
       for (const ocurrencia of ocurrencias) {
         const horarioFijo = horarios.find((h: any) => h.id === ocurrencia.horarioFijoId)
         if (!horarioFijo) continue
-        todosEventos.push(horarioFijoToEvent(horarioFijo, ocurrencia.fecha))
+          todosEventos.push(
+            horarioFijoToEvent(
+              horarioFijo,
+              ocurrencia.fecha,
+              (ocurrencia as any).estadoCuota
+            )
+          )
+        }
       }
-    }
 
     // Procesar bloqueos
     todosEventos.push(...bloqueos.map(bloqueoToEvent))
@@ -121,7 +127,7 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
           editable={false}
         />
 
-        <div className="grid grid-cols-4 gap-4 mt-4">
+        <div className="grid grid-cols-5 gap-4 mt-4">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-blue-500" />
             <span className="text-sm">Individual</span>
@@ -133,6 +139,10 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-indigo-500" />
             <span className="text-sm">Horario Fijo</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-gray-400" />
+            <span className="text-sm">Fijo (cuota pendiente)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-red-500" />
@@ -169,4 +179,3 @@ export function CalendarioProfesor({ usuarioId, profesorId, sedeId }: Calendario
     </>
   )
 }
-

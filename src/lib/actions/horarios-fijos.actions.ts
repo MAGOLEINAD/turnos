@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '../supabase/server'
 import { getUser } from './auth.actions'
 import type { HorarioFijoInput, BajaHorarioFijoInput } from '../validations/horario-fijo.schema'
+import { asegurarCuotasInicialesHorarioFijo } from './cuotas.actions'
 
 function sumarMinutosAHora(horaInicio: string, duracionMinutos: number) {
   const [h, m] = horaInicio.split(':').map(Number)
@@ -11,6 +12,13 @@ function sumarMinutosAHora(horaInicio: string, duracionMinutos: number) {
   const hh = Math.floor(base / 60) % 24
   const mm = base % 60
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`
+}
+
+function obtenerUltimoDiaMesUTC(fecha: Date) {
+  const anio = fecha.getUTCFullYear()
+  const mes = fecha.getUTCMonth()
+  const ultimo = new Date(Date.UTC(anio, mes + 1, 0))
+  return ultimo.toISOString().slice(0, 10)
 }
 
 export async function crearHorarioFijo(data: HorarioFijoInput) {
@@ -61,6 +69,8 @@ export async function crearHorarioFijo(data: HorarioFijoInput) {
 
   if (error) return { error: error.message }
 
+  await asegurarCuotasInicialesHorarioFijo(horarioFijo.id)
+
   revalidatePath('/profesor/calendario')
   revalidatePath('/profesor/agenda')
   revalidatePath('/alumno/horarios')
@@ -107,7 +117,9 @@ export async function obtenerHorariosFijos(
   const { data, error } = await query
 
   if (error) return { error: error.message }
-  return { data }
+  const hoyISO = new Date().toISOString().slice(0, 10)
+  const vigentes = (data || []).filter((h: any) => !h.fecha_baja_efectiva || h.fecha_baja_efectiva >= hoyISO)
+  return { data: vigentes }
 }
 
 export async function darDeBajaHorarioFijo(input: BajaHorarioFijoInput) {
@@ -127,10 +139,27 @@ export async function darDeBajaHorarioFijo(input: BajaHorarioFijoInput) {
 
   if (fetchError) return { error: 'Horario fijo no encontrado' }
 
-  // Desactivar horario fijo
+  const hoy = new Date()
+  const fechaBajaEfectiva =
+    input.modalidad === 'fin_de_mes'
+      ? obtenerUltimoDiaMesUTC(hoy)
+      : hoy.toISOString().slice(0, 10)
+
+  const payloadUpdate =
+    input.modalidad === 'fin_de_mes'
+      ? {
+          baja_modalidad: 'fin_de_mes',
+          fecha_baja_efectiva: fechaBajaEfectiva,
+        }
+      : {
+          activo: false,
+          baja_modalidad: 'inmediata',
+          fecha_baja_efectiva: fechaBajaEfectiva,
+        }
+
   const { error: updateError } = await supabase
     .from('horarios_fijos')
-    .update({ activo: false })
+    .update(payloadUpdate)
     .eq('id', input.horario_fijo_id)
 
   if (updateError) return { error: updateError.message }
@@ -139,7 +168,7 @@ export async function darDeBajaHorarioFijo(input: BajaHorarioFijoInput) {
   const { error: insertError } = await supabase.from('bajas_horarios_fijos').insert({
     horario_fijo_id: input.horario_fijo_id,
     alumno_id: horarioFijo.alumno_id,
-    fecha_baja: new Date().toISOString(),
+    fecha_baja: fechaBajaEfectiva,
     motivo: input.motivo,
   })
 
@@ -173,5 +202,7 @@ export async function obtenerHorariosFijosAlumno(alumnoId: string) {
     .order('hora_inicio', { ascending: true })
 
   if (error) return { error: error.message }
-  return { data }
+  const hoyISO = new Date().toISOString().slice(0, 10)
+  const vigentes = (data || []).filter((h: any) => !h.fecha_baja_efectiva || h.fecha_baja_efectiva >= hoyISO)
+  return { data: vigentes }
 }

@@ -1,15 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { crearReserva } from '@/lib/actions/reservas.actions'
-import { obtenerCreditosAlumno } from '@/lib/actions/alumnos.actions'
-import {
-  obtenerActividadesDisponiblesProfesor,
-  type ActividadDisponibleProfesor,
-} from '@/lib/actions/actividades.actions'
+import { crearCheckoutProReserva } from '@/lib/actions/pagos.actions'
+import { crearHorarioFijo } from '@/lib/actions/horarios-fijos.actions'
+import { useActividadesProfesor } from '@/hooks/useActividades'
+import { useCreditosAlumno } from '@/hooks/useAlumnos'
 import { reservaSchema, type ReservaInput } from '@/lib/validations/reserva.schema'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -22,6 +21,7 @@ import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { formatDateTime, formatDate } from '@/lib/utils/date'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
+import { DIA_SEMANA, FRECUENCIA_HORARIO } from '@/lib/constants/estados'
 
 interface ModalNuevaReservaProps {
   open: boolean
@@ -34,6 +34,8 @@ interface ModalNuevaReservaProps {
   onSuccess?: () => void
 }
 
+type ModoPrimeraClase = 'descontar_senia' | 'cuota_completa'
+
 export function ModalNuevaReserva({
   open,
   onOpenChange,
@@ -45,25 +47,41 @@ export function ModalNuevaReserva({
   onSuccess,
 }: ModalNuevaReservaProps) {
   const [loading, setLoading] = useState(false)
-  const [creditos, setCreditos] = useState<any[]>([])
   const [usarCredito, setUsarCredito] = useState(false)
   const [creditoSeleccionado, setCreditoSeleccionado] = useState<string>('')
-  const [actividades, setActividades] = useState<ActividadDisponibleProfesor[]>([])
   const [actividadSeleccionada, setActividadSeleccionada] = useState<string>('')
   const [esClasePrueba, setEsClasePrueba] = useState(false)
+  const [modoPrimeraClase, setModoPrimeraClase] = useState<ModoPrimeraClase>('descontar_senia')
   const [pagoRegistrado, setPagoRegistrado] = useState(!alumnoId)
   const [origenPagoManual, setOrigenPagoManual] = useState<
     'transferencia' | 'efectivo' | 'manual_override'
   >('manual_override')
   const [montoPagoManual, setMontoPagoManual] = useState<number>(0)
   const [referenciaPagoManual, setReferenciaPagoManual] = useState('')
+  const [creandoCheckout, setCreandoCheckout] = useState(false)
+  const [crearComoRecurrente, setCrearComoRecurrente] = useState(false)
+
+  const actividadesQuery = useActividadesProfesor(profesorId, sedeId)
+  const creditosQuery = useCreditosAlumno(alumnoId || '', sedeId)
+  const actividades = useMemo(
+    () => (actividadesQuery.data ? actividadesQuery.data : []),
+    [actividadesQuery.data]
+  )
+  const creditos = useMemo(
+    () => (creditosQuery.data ? creditosQuery.data : []),
+    [creditosQuery.data]
+  )
+
+  const actividadActual = useMemo(
+    () => actividades.find((a: any) => a.id === actividadSeleccionada) || actividades[0],
+    [actividades, actividadSeleccionada]
+  )
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
-    setValue,
   } = useForm<ReservaInput>({
     resolver: zodResolver(reservaSchema),
     defaultValues: {
@@ -76,54 +94,70 @@ export function ModalNuevaReserva({
     },
   })
 
-  const actividadActual = actividades.find((a) => a.id === actividadSeleccionada)
-
-  const cargarActividades = useCallback(async () => {
-    const result = await obtenerActividadesDisponiblesProfesor(profesorId, sedeId)
-    if (result.error) {
-      toast.error(result.error)
-      setActividades([])
-      return
-    }
-    const data = result.data || []
-    setActividades(data)
-    if (data.length > 0) {
-      setActividadSeleccionada(data[0].id)
-      setValue('actividad_id', data[0].id)
-      setMontoPagoManual(data[0].precio_clase)
-    }
-  }, [profesorId, sedeId, setValue])
-
-  const cargarCreditos = useCallback(async () => {
-    if (!alumnoId) return
-    const result = await obtenerCreditosAlumno(alumnoId, sedeId)
-    if (result.data) {
-      setCreditos(result.data)
-      if (result.data.length > 0) setCreditoSeleccionado(result.data[0].id)
-    }
-  }, [alumnoId, sedeId])
-
-  useEffect(() => {
-    if (!open) return
-    cargarActividades()
-    if (alumnoId) cargarCreditos()
-  }, [open, alumnoId, cargarActividades, cargarCreditos])
-
-  useEffect(() => {
-    if (!actividadActual) return
-    setMontoPagoManual(actividadActual.precio_clase)
-    setValue('cupo_maximo', actividadActual.cupo_maximo)
-  }, [actividadActual, setValue])
+  const cupoPorDefecto = actividadActual?.cupo_maximo || 1
+  const actividadIdFinal = actividadSeleccionada || actividadActual?.id
 
   const onSubmit = async (form: ReservaInput) => {
     setLoading(true)
     try {
+      if (!actividadIdFinal || !actividadActual) {
+        toast.error('Selecciona una actividad.')
+        return
+      }
+
+      if (crearComoRecurrente) {
+        if (!alumnoId) {
+          toast.error('La recurrencia requiere alumno.')
+          return
+        }
+
+        const diaMap = [
+          DIA_SEMANA.DOMINGO,
+          DIA_SEMANA.LUNES,
+          DIA_SEMANA.MARTES,
+          DIA_SEMANA.MIERCOLES,
+          DIA_SEMANA.JUEVES,
+          DIA_SEMANA.VIERNES,
+          DIA_SEMANA.SABADO,
+        ] as const
+
+        const diaSemana = diaMap[fechaInicio.getDay()]
+        const horaInicio = `${String(fechaInicio.getHours()).padStart(2, '0')}:${String(
+          fechaInicio.getMinutes()
+        ).padStart(2, '0')}`
+
+        const horarioResult = await crearHorarioFijo({
+          sede_id: sedeId,
+          profesor_id: profesorId,
+          alumno_id: alumnoId,
+          frecuencia: FRECUENCIA_HORARIO.SEMANAL_1,
+          dia_semana_1: diaSemana,
+          hora_inicio: horaInicio,
+          duracion_minutos: actividadActual.duracion_minutos,
+          fecha_inicio_vigencia: fechaInicio.toISOString().slice(0, 10),
+          activo: true,
+        })
+
+        if ((horarioResult as any).error) {
+          toast.error((horarioResult as any).error)
+          return
+        }
+
+        toast.success('Horario recurrente creado')
+        reset()
+        onOpenChange(false)
+        onSuccess?.()
+        return
+      }
+
       const result = await crearReserva({
         ...form,
         sede_id: sedeId,
         profesor_id: profesorId,
         alumno_id: alumnoId,
-        actividad_id: actividadSeleccionada,
+        actividad_id: actividadIdFinal,
+        tipo: cupoPorDefecto > 1 ? 'grupal' : 'individual',
+        cupo_maximo: cupoPorDefecto,
         fecha_inicio: fechaInicio.toISOString(),
         fecha_fin: fechaFin.toISOString(),
         es_clase_prueba: esClasePrueba,
@@ -140,7 +174,7 @@ export function ModalNuevaReserva({
         return
       }
 
-      toast.success(usarCredito ? 'Reserva creada con crédito' : 'Reserva creada exitosamente')
+      toast.success(usarCredito ? 'Reserva creada con crédito' : 'Reserva creada')
       reset()
       onOpenChange(false)
       onSuccess?.()
@@ -151,12 +185,67 @@ export function ModalNuevaReserva({
     }
   }
 
+  const handleGenerarCheckout = async () => {
+    if (!alumnoId || !actividadActual || !actividadIdFinal) {
+      toast.error('Selecciona una actividad válida.')
+      return
+    }
+
+    setCreandoCheckout(true)
+    try {
+      const montoPrimera =
+        modoPrimeraClase === 'cuota_completa' ? actividadActual.precio_clase : actividadActual.senia_prueba
+      const monto = esClasePrueba ? montoPrimera : actividadActual.precio_clase
+      const fechaLimiteRegularizacion = esClasePrueba
+        ? new Date(
+            Date.UTC(fechaInicio.getUTCFullYear(), fechaInicio.getUTCMonth(), fechaInicio.getUTCDate() - 1)
+          )
+            .toISOString()
+            .slice(0, 10)
+        : null
+
+      const result = await crearCheckoutProReserva({
+        alumnoId,
+        sedeId,
+        titulo: esClasePrueba
+          ? `Primera clase - ${actividadActual.nombre}`
+          : `Reserva actividad - ${actividadActual.nombre}`,
+        descripcion: `${formatDateTime(fechaInicio)} - ${formatDateTime(fechaFin)}`,
+        monto,
+        esSenia: esClasePrueba,
+        metadata: {
+          tipo_pago: 'reserva_clase',
+          profesor_id: profesorId,
+          actividad_id: actividadIdFinal,
+          fecha_inicio: fechaInicio.toISOString(),
+          fecha_fin: fechaFin.toISOString(),
+          es_senia: esClasePrueba,
+          cupo_maximo: cupoPorDefecto,
+          fecha_limite_regularizacion: fechaLimiteRegularizacion,
+          modo_regularizacion_primera_clase: modoPrimeraClase,
+        },
+      })
+
+      if (result.error || !result.data?.initPoint) {
+        toast.error(result.error || 'No se pudo iniciar Checkout Pro')
+        return
+      }
+
+      window.open(result.data.initPoint, '_blank', 'noopener,noreferrer')
+      toast.success('Checkout generado. Completa el pago para confirmar.')
+    } catch {
+      toast.error('No se pudo generar checkout')
+    } finally {
+      setCreandoCheckout(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Nueva Reserva</DialogTitle>
-          <DialogDescription>Selecciona actividad y confirma el pago para reservar.</DialogDescription>
+          <DialogDescription>Selecciona actividad y confirma pago.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -169,27 +258,18 @@ export function ModalNuevaReserva({
 
           <div className="space-y-2">
             <Label>Actividad *</Label>
-            <Select
-              value={actividadSeleccionada}
-              onValueChange={(value) => {
-                setActividadSeleccionada(value)
-                setValue('actividad_id', value)
-              }}
-            >
+            <Select value={actividadIdFinal || ''} onValueChange={setActividadSeleccionada}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecciona actividad" />
               </SelectTrigger>
               <SelectContent>
-                {actividades.map((actividad) => (
+                {actividades.map((actividad: any) => (
                   <SelectItem key={actividad.id} value={actividad.id}>
                     {actividad.nombre}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {errors.actividad_id && (
-              <p className="text-sm text-destructive">{errors.actividad_id.message}</p>
-            )}
           </div>
 
           {actividadActual ? (
@@ -209,28 +289,61 @@ export function ModalNuevaReserva({
             </div>
           ) : null}
 
+          {alumnoId ? (
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <Label htmlFor="crear_como_recurrente" className="text-base">
+                  Crear como recurrente semanal
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Si activas esto se genera horario fijo (sin clase extra).
+                </p>
+              </div>
+              <Switch
+                id="crear_como_recurrente"
+                checked={crearComoRecurrente}
+                onCheckedChange={setCrearComoRecurrente}
+              />
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor="notas">Notas (opcional)</Label>
-            <Textarea
-              id="notas"
-              placeholder="Información adicional..."
-              rows={3}
-              {...register('notas')}
-            />
-            {errors.notas && <p className="text-sm text-destructive">{errors.notas.message}</p>}
+            <Textarea id="notas" rows={3} {...register('notas')} />
+            {errors.notas ? <p className="text-sm text-destructive">{errors.notas.message}</p> : null}
           </div>
 
           {alumnoId && actividadActual?.permite_prueba ? (
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div>
-                <Label htmlFor="es_clase_prueba" className="text-base">
-                  Primera clase (seña)
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Marca esta reserva como prueba paga.
-                </p>
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="es_clase_prueba" className="text-base">
+                    Primera clase
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Seña: ${actividadActual.senia_prueba}
+                  </p>
+                </div>
+                <Switch id="es_clase_prueba" checked={esClasePrueba} onCheckedChange={setEsClasePrueba} />
               </div>
-              <Switch id="es_clase_prueba" checked={esClasePrueba} onCheckedChange={setEsClasePrueba} />
+
+              {esClasePrueba ? (
+                <div className="space-y-2">
+                  <Label>Después de la primera clase</Label>
+                  <Select
+                    value={modoPrimeraClase}
+                    onValueChange={(v) => setModoPrimeraClase(v as ModoPrimeraClase)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="descontar_senia">Descontar seña de la cuota</SelectItem>
+                      <SelectItem value="cuota_completa">Pagar cuota completa ahora</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -250,13 +363,13 @@ export function ModalNuevaReserva({
 
               {usarCredito ? (
                 <div className="space-y-2">
-                  <Label>Selecciona un crédito</Label>
+                  <Label>Selecciona crédito</Label>
                   <Select value={creditoSeleccionado} onValueChange={setCreditoSeleccionado}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecciona un crédito" />
                     </SelectTrigger>
                     <SelectContent>
-                      {creditos.map((credito) => (
+                      {creditos.map((credito: any) => (
                         <SelectItem key={credito.id} value={credito.id}>
                           Crédito del {formatDate(new Date(credito.fecha_generacion))}
                         </SelectItem>
@@ -272,13 +385,13 @@ export function ModalNuevaReserva({
             </div>
           ) : null}
 
-          {alumnoId && !usarCredito ? (
+          {alumnoId && !usarCredito && !crearComoRecurrente ? (
             <div className="space-y-3 rounded-md border p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label htmlFor="pago_registrado">Pago registrado</Label>
+                  <Label htmlFor="pago_registrado">Pago manual registrado</Label>
                   <p className="text-sm text-muted-foreground">
-                    La reserva se confirma solo con pago registrado.
+                    También puedes pagar online con Mercado Pago.
                   </p>
                 </div>
                 <Switch id="pago_registrado" checked={pagoRegistrado} onCheckedChange={setPagoRegistrado} />
@@ -330,7 +443,7 @@ export function ModalNuevaReserva({
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Sin pago registrado no se podrá confirmar esta reserva.
+                    Sin pago registrado no se podrá confirmar manualmente.
                   </AlertDescription>
                 </Alert>
               )}
@@ -341,8 +454,21 @@ export function ModalNuevaReserva({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <LoadingButton type="submit" loading={loading} loadingText="Guardando reserva...">
-              Confirmar reserva
+
+            {alumnoId && !usarCredito && !crearComoRecurrente ? (
+              <LoadingButton
+                type="button"
+                variant="outline"
+                loading={creandoCheckout}
+                loadingText="Generando checkout..."
+                onClick={handleGenerarCheckout}
+              >
+                Pagar online (MP)
+              </LoadingButton>
+            ) : null}
+
+            <LoadingButton type="submit" loading={loading} loadingText="Guardando...">
+              {crearComoRecurrente ? 'Crear recurrente' : 'Confirmar clase extra'}
             </LoadingButton>
           </div>
         </form>

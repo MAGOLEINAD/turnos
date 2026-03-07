@@ -3,6 +3,8 @@ import { createServiceRoleClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { getAdminSedeContext } from '@/lib/actions/admin-context.actions'
+import { sincronizarCuotasActivasSede } from '@/lib/actions/cuotas.actions'
+import { CuotasAdminPanel } from '@/components/usuarios/CuotasAdminPanel'
 
 interface AdminReportesPageProps {
   searchParams?: {
@@ -43,13 +45,24 @@ export default async function AdminReportesPage({ searchParams }: AdminReportesP
     )
   }
 
+  await sincronizarCuotasActivasSede(sedeSeleccionada, 1)
+
   const supabase = createServiceRoleClient()
 
   const inicioMes = new Date()
   inicioMes.setDate(1)
   inicioMes.setHours(0, 0, 0, 0)
 
-  const [reservasTotales, confirmadasMes, canceladasMes, profesoresActivos, alumnosActivos] =
+  const [
+    reservasTotales,
+    confirmadasMes,
+    canceladasMes,
+    profesoresActivos,
+    alumnosActivos,
+    cuotasPendientes,
+    cuotasVencidas,
+    cuotasListado,
+  ] =
     await Promise.all([
       supabase.from('reservas').select('id', { count: 'exact', head: true }).eq('sede_id', sedeSeleccionada),
       supabase
@@ -74,6 +87,35 @@ export default async function AdminReportesPage({ searchParams }: AdminReportesP
         .select('id', { count: 'exact', head: true })
         .eq('sede_id', sedeSeleccionada)
         .eq('activo', true),
+      supabase
+        .from('cuotas_mensuales')
+        .select('id', { count: 'exact', head: true })
+        .eq('sede_id', sedeSeleccionada)
+        .eq('estado', 'pendiente'),
+      supabase
+        .from('cuotas_mensuales')
+        .select('id', { count: 'exact', head: true })
+        .eq('sede_id', sedeSeleccionada)
+        .eq('estado', 'vencida'),
+      supabase
+        .from('cuotas_mensuales')
+        .select(`
+          id,
+          anio,
+          mes,
+          estado,
+          monto,
+          fecha_limite_final,
+          alumnos (
+            usuarios (nombre, apellido)
+          ),
+          actividades (nombre)
+        `)
+        .eq('sede_id', sedeSeleccionada)
+        .in('estado', ['pendiente', 'vencida'])
+        .order('anio', { ascending: false })
+        .order('mes', { ascending: false })
+        .limit(20),
     ])
 
   return (
@@ -115,7 +157,7 @@ export default async function AdminReportesPage({ searchParams }: AdminReportesP
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Reservas Totales</CardTitle>
@@ -160,7 +202,27 @@ export default async function AdminReportesPage({ searchParams }: AdminReportesP
             <p className="text-2xl font-bold">{alumnosActivos.count || 0}</p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Cuotas Pendientes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{cuotasPendientes.count || 0}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Cuotas Vencidas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{cuotasVencidas.count || 0}</p>
+          </CardContent>
+        </Card>
       </div>
+
+      <CuotasAdminPanel cuotas={(cuotasListado.data || []) as any[]} />
     </div>
   )
 }

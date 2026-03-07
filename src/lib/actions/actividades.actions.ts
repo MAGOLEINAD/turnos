@@ -10,6 +10,7 @@ export type ActividadDisponibleProfesor = {
   color_calendario: string
   permite_prueba: boolean
   es_recurrente_default: boolean
+  senia_prueba: number
   precio_clase: number
   duracion_minutos: number
   cupo_maximo: number
@@ -32,6 +33,7 @@ export async function obtenerActividadesDisponiblesProfesor(
         color_calendario,
         permite_prueba,
         es_recurrente_default,
+        senia_prueba,
         precio_base,
         duracion_minutos_base,
         cupo_maximo_base,
@@ -64,6 +66,7 @@ export async function obtenerActividadesDisponiblesProfesor(
         color_calendario: actividad.color_calendario || '#F59E0B',
         permite_prueba: actividad.permite_prueba ?? true,
         es_recurrente_default: actividad.es_recurrente_default ?? true,
+        senia_prueba: Number(actividad.senia_prueba ?? 0),
         precio_clase: Number(configSede?.precio_clase ?? actividad.precio_base ?? 0),
         duracion_minutos: Number(
           configSede?.duracion_minutos ?? actividad.duracion_minutos_base ?? 60

@@ -1,18 +1,23 @@
+'use client'
+
 import { redirect } from 'next/navigation'
-import { AlumnosList } from '@/components/alumnos/AlumnosList'
-import { obtenerAlumnos } from '@/lib/actions/alumnos.actions'
-import { getAdminSedeContext } from '@/lib/actions/admin-context.actions'
-import { SedeContextSelector } from '@/components/sedes/SedeContextSelector'
+import { AlumnosListClient } from '@/components/alumnos/AlumnosListClient'
+import { useAdminSedeContext } from '@/hooks/useAdminContext'
+import { SedeContextSelectorClient } from '@/components/sedes/SedeContextSelectorClient'
+import { useSearchParams } from 'next/navigation'
 
-interface AdminAlumnosPageProps {
-  searchParams?: {
-    sede?: string
+export default function AdminAlumnosPage() {
+  const searchParams = useSearchParams()
+  const sedeParam = searchParams.get('sede')
+
+  // Obtener contexto de admin con React Query
+  const { data: ctx, isLoading } = useAdminSedeContext(sedeParam || undefined)
+
+  if (isLoading) {
+    return <div className="py-12 text-center">Cargando...</div>
   }
-}
 
-export default async function AdminAlumnosPage({ searchParams }: AdminAlumnosPageProps) {
-  const ctx = await getAdminSedeContext(searchParams?.sede)
-  if (!ctx.usuario) {
+  if (!ctx?.usuario) {
     redirect('/login')
   }
 
@@ -24,7 +29,7 @@ export default async function AdminAlumnosPage({ searchParams }: AdminAlumnosPag
     )
   }
 
-  if (ctx.sedes.length === 0) {
+  if (!ctx.sedes || ctx.sedes.length === 0) {
     return (
       <div className="py-12 text-center">
         <p className="text-muted-foreground">
@@ -35,20 +40,7 @@ export default async function AdminAlumnosPage({ searchParams }: AdminAlumnosPag
   }
 
   const sedesDisponibles = ctx.sedes
-  // Si no hay parámetro sede, obtener alumnos de todas las sedes
-  const sedeSeleccionada = searchParams?.sede
-
-  const result = sedeSeleccionada
-    ? await obtenerAlumnos(sedeSeleccionada)
-    : await obtenerAlumnos() // sin sede = todas las sedes del admin
-
-  if (result.error) {
-    return (
-      <div className="py-12 text-center">
-        <p className="text-destructive">Error: {result.error}</p>
-      </div>
-    )
-  }
+  const sedeSeleccionada = sedeParam
 
   return (
     <div>
@@ -60,10 +52,10 @@ export default async function AdminAlumnosPage({ searchParams }: AdminAlumnosPag
           </p>
         </div>
 
-        <SedeContextSelector sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada ?? null} />
+        <SedeContextSelectorClient sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada ?? null} />
       </div>
 
-      <AlumnosList alumnos={result.data || []} sedeId={sedeSeleccionada || sedesDisponibles[0]?.id} />
+      <AlumnosListClient sedeId={sedeSeleccionada || undefined} />
     </div>
   )
 }

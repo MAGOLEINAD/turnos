@@ -138,6 +138,40 @@ async function ensurePerfilPorRol(usuarioId: string, membresia: MembresiaAuth) {
   }
 }
 
+async function ensureAlumnoMembershipBySedeSlug(usuarioId: string, sedeSlug?: string | null) {
+  if (!sedeSlug) return
+  const service = await getServiceRoleClientSafe()
+  if (!service) return
+
+  const { data: sede } = await service
+    .from('sedes')
+    .select('id, organizacion_id, activa')
+    .eq('slug', sedeSlug)
+    .maybeSingle()
+
+  if (!sede?.id || sede.activa === false) return
+
+  const { data: membresiaExistente } = await service
+    .from('membresias')
+    .select('id')
+    .eq('usuario_id', usuarioId)
+    .eq('sede_id', sede.id)
+    .eq('rol', 'alumno')
+    .maybeSingle()
+
+  if (!membresiaExistente) {
+    await service.from('membresias').insert({
+      usuario_id: usuarioId,
+      sede_id: sede.id,
+      organizacion_id: sede.organizacion_id,
+      rol: 'alumno',
+      activa: true,
+    })
+  } else {
+    await service.from('membresias').update({ activa: true }).eq('id', membresiaExistente.id)
+  }
+}
+
 async function getMembresiasConEstadoOrganizacion(supabase: any, usuarioId: string) {
   const { data: membresias, error } = await supabase
     .from('membresias')
@@ -242,6 +276,10 @@ export async function login(data: LoginInput) {
     return { error: 'Tu usuario esta inactivo. Contacta al administrador.' }
   }
 
+  if (data.publicSedeSlug) {
+    await ensureAlumnoMembershipBySedeSlug(authData.user.id, data.publicSedeSlug)
+  }
+
   const {
     data: membresias,
     error: membresiasError,
@@ -262,6 +300,30 @@ export async function login(data: LoginInput) {
   const tieneAccesoHabilitado = (membresias || []).some(isMembresiaHabilitada)
   const membresiasHabilitadas = (membresias || []).filter(isMembresiaHabilitada)
   const rolesActivosUnicos = getRolesActivosUnicos(membresiasHabilitadas)
+
+  if (data.publicSedeSlug) {
+    const serviceRole = await getServiceRoleClientSafe()
+    const { data: sedePublica } = serviceRole
+      ? await serviceRole
+          .from('sedes')
+          .select('id')
+          .eq('slug', data.publicSedeSlug)
+          .maybeSingle()
+      : ({ data: null } as any)
+
+    if (sedePublica?.id) {
+      const membresiaAlumnoSede = membresiasHabilitadas.find(
+        (m) => m.rol === 'alumno' && m.sede_id === sedePublica.id
+      )
+
+      if (membresiaAlumnoSede) {
+        await ensurePerfilPorRol(authData.user.id, membresiaAlumnoSede)
+        await setContextoActivo(authData.user.id, membresiaAlumnoSede.id)
+        revalidatePath('/', 'layout')
+        redirect('/alumno/calendario')
+      }
+    }
+  }
 
   if (tieneMembresias && !tieneAccesoHabilitado) {
     await supabase.auth.signOut()
@@ -326,6 +388,10 @@ export async function register(data: RegisterInput) {
   if (userError) {
     console.error('Error creando usuario:', userError)
     return { error: translateAuthError(userError.message) }
+  }
+
+  if (data.publicSedeSlug) {
+    await ensureAlumnoMembershipBySedeSlug(authData.user.id, data.publicSedeSlug)
   }
 
   return { success: true }

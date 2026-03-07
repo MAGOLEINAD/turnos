@@ -369,5 +369,56 @@ async function verificarDisponibilidadProfesor(
     .or(`and(fecha_inicio.lt.${fechaFin.toISOString()},fecha_fin.gt.${fechaInicio.toISOString()})`)
   if (bloqueosPuntuales && bloqueosPuntuales.length > 0) return false
 
+  const diaSemanaMap = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+  const diaSemana = diaSemanaMap[fechaInicio.getDay()]
+  const fechaISO = fechaInicio.toISOString().slice(0, 10)
+  const horaInicio = fechaInicio.toISOString().slice(11, 19)
+  const horaFin = fechaFin.toISOString().slice(11, 19)
+
+  const { data: horariosFijos } = await supabase
+    .from('horarios_fijos')
+    .select(
+      `
+      id,
+      profesor_id,
+      dias_semana,
+      hora_inicio,
+      hora_fin,
+      fecha_inicio,
+      fecha_fin,
+      fecha_baja_efectiva,
+      cuotas_mensuales (
+        anio,
+        mes,
+        estado,
+        fecha_limite_final
+      )
+    `
+    )
+    .in('profesor_id', profesorIds)
+    .eq('activo', true)
+    .lte('fecha_inicio', fechaISO)
+    .or(`fecha_fin.is.null,fecha_fin.gte.${fechaISO}`)
+
+  const anio = fechaInicio.getUTCFullYear()
+  const mes = fechaInicio.getUTCMonth() + 1
+  const ahora = new Date()
+
+  const conflictoConFijo = (horariosFijos || []).some((hf: any) => {
+    if (hf.fecha_baja_efectiva && fechaISO > hf.fecha_baja_efectiva) return false
+
+    const dias = hf.dias_semana || []
+    if (!dias.includes(diaSemana)) return false
+    if (!(hf.hora_inicio < horaFin && hf.hora_fin > horaInicio)) return false
+
+    const cuota = (hf.cuotas_mensuales || []).find((c: any) => c.anio === anio && c.mes === mes)
+    if (!cuota) return true
+    if (cuota.estado === 'pagada') return true
+    const limite = new Date(`${cuota.fecha_limite_final}T23:59:59.999Z`)
+    return ahora <= limite
+  })
+
+  if (conflictoConFijo) return false
+
   return true
 }

@@ -26,7 +26,14 @@ interface HorarioFijo {
   duracion_minutos?: number
   fecha_inicio?: string
   fecha_inicio_vigencia?: string
+  fecha_baja_efectiva?: string | null
   activo: boolean
+  cuotas_mensuales?: Array<{
+    anio: number
+    mes: number
+    estado: 'pendiente' | 'pagada' | 'vencida'
+    fecha_limite_final: string
+  }>
 }
 
 interface OcurrenciaHorarioFijo {
@@ -34,6 +41,7 @@ interface OcurrenciaHorarioFijo {
   fecha: Date
   horaInicio: string
   duracionMinutos: number
+  estadoCuota: 'pagada' | 'pendiente' | 'vencida'
 }
 
 /**
@@ -72,6 +80,26 @@ export function generarOcurrenciasHorarioFijo(
     return 0
   }
 
+  const getEstadoCuotaEnFecha = (fecha: Dayjs): 'pagada' | 'pendiente' | 'vencida' => {
+    const anio = fecha.year()
+    const mes = fecha.month() + 1
+    const cuota = (horarioFijo.cuotas_mensuales || []).find(
+      (c) => c.anio === anio && c.mes === mes
+    )
+
+    if (!cuota) {
+      return 'pendiente'
+    }
+
+    if (cuota.estado === 'pagada') {
+      return 'pagada'
+    }
+
+    const ahora = new Date()
+    const limite = new Date(`${cuota.fecha_limite_final}T23:59:59.999Z`)
+    return ahora <= limite ? 'pendiente' : 'vencida'
+  }
+
   // Iterar desde la fecha de inicio del rango (o desde vigencia si es posterior)
   let fechaActual = inicio.isAfter(vigenciaInicio) ? inicio : vigenciaInicio
 
@@ -81,11 +109,26 @@ export function generarOcurrenciasHorarioFijo(
 
     // Si este día de la semana está en el horario fijo
     if (diasSemana.includes(diaSemana)) {
+      if (
+        horarioFijo.fecha_baja_efectiva &&
+        fechaActual.isAfter(parseDate(horarioFijo.fecha_baja_efectiva), 'day')
+      ) {
+        fechaActual = sumarDias(fechaActual, 1)
+        continue
+      }
+
+      const estadoCuota = getEstadoCuotaEnFecha(fechaActual)
+      if (estadoCuota === 'vencida') {
+        fechaActual = sumarDias(fechaActual, 1)
+        continue
+      }
+
       ocurrencias.push({
         horarioFijoId: horarioFijo.id,
         fecha: fechaActual.toDate(),
         horaInicio: horarioFijo.hora_inicio,
         duracionMinutos: getDuracionMinutos(),
+        estadoCuota,
       })
     }
 
@@ -134,6 +177,13 @@ export function tieneOcurrenciaEnFecha(
 
   // Verificar que la fecha sea después de la vigencia
   if (fechaParsed.isBefore(vigenciaInicio, 'day')) {
+    return false
+  }
+
+  if (
+    horarioFijo.fecha_baja_efectiva &&
+    fechaParsed.isAfter(parseDate(horarioFijo.fecha_baja_efectiva), 'day')
+  ) {
     return false
   }
 
@@ -186,16 +236,44 @@ export function proximaOcurrenciaHorarioFijo(
     return 0
   }
 
+  const getEstadoCuotaEnFecha = (fecha: Dayjs): 'pagada' | 'pendiente' | 'vencida' => {
+    const anio = fecha.year()
+    const mes = fecha.month() + 1
+    const cuota = (horarioFijo.cuotas_mensuales || []).find(
+      (c) => c.anio === anio && c.mes === mes
+    )
+    if (!cuota) return 'pendiente'
+    if (cuota.estado === 'pagada') return 'pagada'
+    const ahora = new Date()
+    const limite = new Date(`${cuota.fecha_limite_final}T23:59:59.999Z`)
+    return ahora <= limite ? 'pendiente' : 'vencida'
+  }
+
   // Buscar la próxima ocurrencia en los próximos 14 días
   for (let i = 0; i < 14; i++) {
     const diaSemana = fechaActual.day()
 
     if (diasSemana.includes(diaSemana)) {
+      if (
+        horarioFijo.fecha_baja_efectiva &&
+        fechaActual.isAfter(parseDate(horarioFijo.fecha_baja_efectiva), 'day')
+      ) {
+        fechaActual = sumarDias(fechaActual, 1)
+        continue
+      }
+
+      const estadoCuota = getEstadoCuotaEnFecha(fechaActual)
+      if (estadoCuota === 'vencida') {
+        fechaActual = sumarDias(fechaActual, 1)
+        continue
+      }
+
       return {
         horarioFijoId: horarioFijo.id,
         fecha: fechaActual.toDate(),
         horaInicio: horarioFijo.hora_inicio,
         duracionMinutos: getDuracionMinutos(),
+        estadoCuota,
       }
     }
 

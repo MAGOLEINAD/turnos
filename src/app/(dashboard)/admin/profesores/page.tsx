@@ -1,18 +1,23 @@
+'use client'
+
 import { redirect } from 'next/navigation'
-import { ProfesoresList } from '@/components/profesores/ProfesoresList'
-import { obtenerProfesores } from '@/lib/actions/profesores.actions'
-import { getAdminSedeContext } from '@/lib/actions/admin-context.actions'
-import { SedeContextSelector } from '@/components/sedes/SedeContextSelector'
+import { ProfesoresListClient } from '@/components/profesores/ProfesoresListClient'
+import { useAdminSedeContext } from '@/hooks/useAdminContext'
+import { SedeContextSelectorClient } from '@/components/sedes/SedeContextSelectorClient'
+import { useSearchParams } from 'next/navigation'
 
-interface AdminProfesoresPageProps {
-  searchParams?: {
-    sede?: string
+export default function AdminProfesoresPage() {
+  const searchParams = useSearchParams()
+  const sedeParam = searchParams.get('sede')
+
+  // Obtener contexto de admin con React Query
+  const { data: ctx, isLoading } = useAdminSedeContext(sedeParam || undefined)
+
+  if (isLoading) {
+    return <div className="py-12 text-center">Cargando...</div>
   }
-}
 
-export default async function AdminProfesoresPage({ searchParams }: AdminProfesoresPageProps) {
-  const ctx = await getAdminSedeContext(searchParams?.sede)
-  if (!ctx.usuario) {
+  if (!ctx?.usuario) {
     redirect('/login')
   }
 
@@ -24,7 +29,7 @@ export default async function AdminProfesoresPage({ searchParams }: AdminProfeso
     )
   }
 
-  if (ctx.sedes.length === 0) {
+  if (!ctx.sedes || ctx.sedes.length === 0) {
     return (
       <div className="py-12 text-center">
         <p className="text-muted-foreground">
@@ -35,20 +40,7 @@ export default async function AdminProfesoresPage({ searchParams }: AdminProfeso
   }
 
   const sedesDisponibles = ctx.sedes
-  // Si no hay parámetro sede, obtener profesores de todas las sedes
-  const sedeSeleccionada = searchParams?.sede
-
-  const result = sedeSeleccionada
-    ? await obtenerProfesores(sedeSeleccionada)
-    : await obtenerProfesores() // sin sede = todas las sedes del admin
-
-  if (result.error) {
-    return (
-      <div className="py-12 text-center">
-        <p className="text-destructive">Error: {result.error}</p>
-      </div>
-    )
-  }
+  const sedeSeleccionada = sedeParam
 
   return (
     <div>
@@ -60,12 +52,11 @@ export default async function AdminProfesoresPage({ searchParams }: AdminProfeso
           </p>
         </div>
 
-        <SedeContextSelector sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada ?? null} />
+        <SedeContextSelectorClient sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada ?? null} />
       </div>
 
-      <ProfesoresList
-        profesores={result.data || []}
-        sedeId={sedeSeleccionada || sedesDisponibles[0]?.id}
+      <ProfesoresListClient
+        sedeId={sedeSeleccionada || undefined}
         sedes={sedesDisponibles.map((sede: any) => ({ id: sede.id, nombre: sede.nombre }))}
       />
     </div>

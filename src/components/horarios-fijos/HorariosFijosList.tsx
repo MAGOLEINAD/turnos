@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { Calendar, Clock, User, Repeat, AlertCircle } from 'lucide-react'
 import { formatDate } from '@/lib/utils/date'
@@ -27,11 +28,12 @@ export function HorariosFijosList({
   alumnoId,
   mostrarBotonCrear = true,
 }: HorariosFijosListProps) {
-  const [horariosFijos, setHorariosFijos] = useState(horariosFijosIniciales)
+  const [horariosFijos] = useState(horariosFijosIniciales)
   const [modalCrearOpen, setModalCrearOpen] = useState(false)
   const [modalBajaOpen, setModalBajaOpen] = useState(false)
   const [horarioSeleccionado, setHorarioSeleccionado] = useState<any>(null)
   const [motivoBaja, setMotivoBaja] = useState('')
+  const [modalidadBaja, setModalidadBaja] = useState<'inmediata' | 'fin_de_mes'>('inmediata')
   const [loadingBaja, setLoadingBaja] = useState(false)
 
   const handleDarDeBaja = (horario: any) => {
@@ -46,19 +48,24 @@ export function HorariosFijosList({
     try {
       const result = await darDeBajaHorarioFijo({
         horario_fijo_id: horarioSeleccionado.id,
+        modalidad: modalidadBaja,
         motivo: motivoBaja,
       })
 
       if (result.error) {
         toast.error(result.error)
       } else {
-        toast.success('Horario fijo dado de baja exitosamente')
+        toast.success(
+          modalidadBaja === 'fin_de_mes'
+            ? 'Baja programada a fin de mes'
+            : 'Horario fijo dado de baja exitosamente'
+        )
         setMotivoBaja('')
+        setModalidadBaja('inmediata')
         setModalBajaOpen(false)
-        // Recargar para mostrar cambios
         window.location.reload()
       }
-    } catch (error) {
+    } catch {
       toast.error('Error al dar de baja el horario')
     } finally {
       setLoadingBaja(false)
@@ -86,7 +93,7 @@ export function HorariosFijosList({
   return (
     <>
       <div className="space-y-6">
-        {mostrarBotonCrear && (
+        {mostrarBotonCrear ? (
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold">Horarios Fijos</h2>
@@ -94,25 +101,21 @@ export function HorariosFijosList({
                 {horariosFijos.length} {horariosFijos.length === 1 ? 'horario' : 'horarios'} activos
               </p>
             </div>
-            <Button onClick={() => setModalCrearOpen(true)}>
-              Nuevo Horario Fijo
-            </Button>
+            <Button onClick={() => setModalCrearOpen(true)}>Nuevo Horario Fijo</Button>
           </div>
-        )}
+        ) : null}
 
         {horariosFijos.length === 0 ? (
           <Card>
             <CardContent className="py-12">
               <div className="text-center">
                 <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">
-                  No tienes horarios fijos configurados aún.
-                </p>
-                {mostrarBotonCrear && (
+                <p className="text-muted-foreground">No tienes horarios fijos configurados aun.</p>
+                {mostrarBotonCrear ? (
                   <Button onClick={() => setModalCrearOpen(true)} className="mt-4">
                     Crear Primer Horario Fijo
                   </Button>
-                )}
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -128,67 +131,65 @@ export function HorariosFijosList({
                         {getDiasSemana(horario)}
                       </CardTitle>
                       <Badge variant="outline" className="mt-2">
-                        {FRECUENCIA_HORARIO_LABELS[horario.frecuencia as keyof typeof FRECUENCIA_HORARIO_LABELS]}
+                        {
+                          FRECUENCIA_HORARIO_LABELS[
+                            horario.frecuencia as keyof typeof FRECUENCIA_HORARIO_LABELS
+                          ]
+                        }
                       </Badge>
                     </div>
-                    {horario.profesores && (
+                    {horario.profesores ? (
                       <div
                         className="w-6 h-6 rounded-full border-2 border-white shadow"
                         style={{ backgroundColor: horario.profesores.color_calendario || '#6366F1' }}
-                        title={`${horario.profesores.usuarios?.nombre} ${horario.profesores.usuarios?.apellido}`}
+                        title={`${horario.profesores.usuarios?.nombre || ''} ${horario.profesores.usuarios?.apellido || ''}`}
                       />
-                    )}
+                    ) : null}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {/* Horario */}
                   <div className="flex items-center gap-2 text-sm">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <span>{horario.hora_inicio}</span>
                     {getDuracionMinutos(horario) ? (
-                      <span className="text-muted-foreground">
-                        ({getDuracionMinutos(horario)} min)
-                      </span>
+                      <span className="text-muted-foreground">({getDuracionMinutos(horario)} min)</span>
                     ) : null}
                   </div>
 
-                  {/* Profesor */}
-                  {horario.profesores && (
+                  {horario.profesores ? (
                     <div className="flex items-center gap-2 text-sm">
                       <User className="h-4 w-4 text-muted-foreground" />
                       <span>
                         {horario.profesores.usuarios?.nombre} {horario.profesores.usuarios?.apellido}
                       </span>
                     </div>
-                  )}
+                  ) : null}
 
-                  {/* Alumno (si se muestra desde vista de admin/profesor) */}
-                  {horario.alumnos && !alumnoId && (
+                  {horario.alumnos && !alumnoId ? (
                     <div className="flex items-center gap-2 text-sm">
                       <User className="h-4 w-4 text-muted-foreground" />
                       <span>
                         {horario.alumnos.usuarios?.nombre} {horario.alumnos.usuarios?.apellido}
                       </span>
                     </div>
-                  )}
+                  ) : null}
 
-                  {/* Vigencia */}
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Repeat className="h-4 w-4" />
-                    <span>
-                      Desde {formatDate(new Date(horario.fecha_inicio))}
-                    </span>
+                    <span>Desde {formatDate(new Date(horario.fecha_inicio))}</span>
                   </div>
 
-                  {/* Sede */}
-                  {horario.sedes && (
-                    <div className="text-sm text-muted-foreground">
-                      Sede: {horario.sedes.nombre}
-                    </div>
-                  )}
+                  {horario.fecha_baja_efectiva ? (
+                    <p className="text-xs text-orange-600">
+                      Baja efectiva: {formatDate(new Date(horario.fecha_baja_efectiva))}
+                    </p>
+                  ) : null}
 
-                  {/* Botón de baja */}
-                  {alumnoId && (
+                  {horario.sedes ? (
+                    <div className="text-sm text-muted-foreground">Sede: {horario.sedes.nombre}</div>
+                  ) : null}
+
+                  {alumnoId ? (
                     <div className="pt-2">
                       <Button
                         variant="destructive"
@@ -199,7 +200,7 @@ export function HorariosFijosList({
                         Dar de Baja
                       </Button>
                     </div>
-                  )}
+                  ) : null}
                 </CardContent>
               </Card>
             ))}
@@ -207,7 +208,6 @@ export function HorariosFijosList({
         )}
       </div>
 
-      {/* Modal de creación */}
       <FormHorarioFijo
         open={modalCrearOpen}
         onOpenChange={setModalCrearOpen}
@@ -216,13 +216,12 @@ export function HorariosFijosList({
         onSuccess={() => window.location.reload()}
       />
 
-      {/* Modal de baja */}
       <Dialog open={modalBajaOpen} onOpenChange={setModalBajaOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Dar de Baja Horario Fijo</DialogTitle>
             <DialogDescription>
-              Esta acción desactivará el horario fijo desde la próxima ocurrencia
+              Elige si la baja es inmediata o al cierre del mes actual.
             </DialogDescription>
           </DialogHeader>
 
@@ -232,29 +231,44 @@ export function HorariosFijosList({
                 <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
-                    ¿Estás seguro?
+                    Confirma la baja
                   </p>
                   <p className="text-sm text-orange-700 dark:text-orange-400 mt-1">
-                    Se cancelarán todas las futuras ocurrencias de este horario fijo.
+                    Si eliges fin de mes, el horario queda reservado y no se libera el cupo hasta la
+                    fecha efectiva.
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="space-y-2">
+              <Label>Modalidad de baja *</Label>
+              <Select
+                value={modalidadBaja}
+                onValueChange={(v: string) => setModalidadBaja(v as 'inmediata' | 'fin_de_mes')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inmediata">Inmediata (libera cupo ahora)</SelectItem>
+                  <SelectItem value="fin_de_mes">Fin de mes (mantiene cupo hasta cierre mensual)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="motivo">Motivo de la Baja *</Label>
               <Textarea
                 id="motivo"
-                placeholder="Explica por qué deseas dar de baja este horario..."
+                placeholder="Explica por que deseas dar de baja este horario..."
                 rows={3}
                 value={motivoBaja}
                 onChange={(e) => setMotivoBaja(e.target.value)}
               />
-              {motivoBaja.length > 0 && motivoBaja.length < 10 && (
-                <p className="text-xs text-destructive">
-                  Mínimo 10 caracteres ({motivoBaja.length}/10)
-                </p>
-              )}
+              {motivoBaja.length > 0 && motivoBaja.length < 10 ? (
+                <p className="text-xs text-destructive">Minimo 10 caracteres ({motivoBaja.length}/10)</p>
+              ) : null}
             </div>
 
             <div className="flex justify-end gap-2">
@@ -263,6 +277,7 @@ export function HorariosFijosList({
                 onClick={() => {
                   setModalBajaOpen(false)
                   setMotivoBaja('')
+                  setModalidadBaja('inmediata')
                 }}
                 disabled={loadingBaja}
               >

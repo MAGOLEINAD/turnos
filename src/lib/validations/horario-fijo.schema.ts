@@ -53,6 +53,7 @@ export type HorarioFijoInput = z.infer<typeof horarioFijoSchema>
 
 export const bajaHorarioFijoSchema = z.object({
   horario_fijo_id: z.string().uuid(),
+  modalidad: z.enum(['inmediata', 'fin_de_mes']).default('inmediata'),
   motivo: z.string().min(10, 'El motivo debe tener al menos 10 caracteres'),
 })
 

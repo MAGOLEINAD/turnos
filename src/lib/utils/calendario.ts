@@ -74,7 +74,11 @@ export function reservaToEvent(reserva: any): EventInput {
 /**
  * Convierte un horario fijo a evento de FullCalendar
  */
-export function horarioFijoToEvent(horarioFijo: any, fecha: Date): EventInput {
+export function horarioFijoToEvent(
+  horarioFijo: any,
+  fecha: Date,
+  estadoCuota?: 'pagada' | 'pendiente' | 'vencida'
+): EventInput {
   const [hora, minuto] = horarioFijo.hora_inicio.split(':').map(Number)
   const duracionMinutos =
     typeof horarioFijo.duracion_minutos === 'number'
@@ -103,14 +107,15 @@ export function horarioFijoToEvent(horarioFijo: any, fecha: Date): EventInput {
 
   return {
     id: `horario-fijo-${horarioFijo.id}-${fecha.toISOString()}`,
-    title: alumnoNombre,
+    title: estadoCuota === 'pendiente' ? `${alumnoNombre} (cuota pendiente)` : alumnoNombre,
     start,
     end,
-    backgroundColor: CALENDAR_COLORS.HORARIO_FIJO,
-    borderColor: CALENDAR_COLORS.HORARIO_FIJO,
+    backgroundColor: estadoCuota === 'pendiente' ? '#9CA3AF' : CALENDAR_COLORS.HORARIO_FIJO,
+    borderColor: estadoCuota === 'pendiente' ? '#6B7280' : CALENDAR_COLORS.HORARIO_FIJO,
     extendedProps: {
       tipo: 'horario_fijo',
       horarioFijo,
+      estadoCuota: estadoCuota || 'pagada',
     },
   }
 }

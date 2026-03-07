@@ -31,6 +31,7 @@ export default async function CalendarioPublicoPage({
     <div className="container mx-auto py-8 px-4">
       <CalendarioPublico
         sedeId={sede.id}
+        sedeSlug={params.sedeSlug}
         sedeNombre={sede.nombre}
         mostrarProfesor={mostrarProfesor}
       />

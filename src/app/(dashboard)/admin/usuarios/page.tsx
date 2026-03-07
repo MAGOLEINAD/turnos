@@ -4,15 +4,11 @@
 
 import { redirect } from 'next/navigation'
 import { UsuariosAdminTable } from '@/components/usuarios/UsuariosAdminTable'
-import { getUser } from '@/lib/actions/auth.actions'
-import { getSedesParaAsignacion, getUsuarios } from '@/lib/actions/usuarios.actions'
+import { getUsuariosAdminPageData } from '@/lib/actions/usuarios.actions'
 
 export default async function AdminUsuariosPage() {
-  const [usuarioActual, usuariosResult, sedesResult] = await Promise.all([
-    getUser(),
-    getUsuarios(),
-    getSedesParaAsignacion(),
-  ])
+  const pageData = await getUsuariosAdminPageData()
+  const usuarioActual = pageData.usuario
 
   if (!usuarioActual) {
     redirect('/login')
@@ -35,24 +31,11 @@ export default async function AdminUsuariosPage() {
     )
   }
 
-  const usuarios = usuariosResult.data || []
-  const sedes = sedesResult.data || []
-
-  if (usuariosResult.error) {
+  if (pageData.error) {
     return (
       <div className="p-6">
         <div className="rounded-md border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-          Error al cargar usuarios: {usuariosResult.error}
-        </div>
-      </div>
-    )
-  }
-
-  if (sedesResult.error) {
-    return (
-      <div className="p-6">
-        <div className="rounded-md border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-          Error al cargar sedes: {sedesResult.error}
+          Error al cargar usuarios: {pageData.error}
         </div>
       </div>
     )
@@ -68,8 +51,8 @@ export default async function AdminUsuariosPage() {
       </div>
 
       <UsuariosAdminTable
-        usuarios={usuarios as any[]}
-        sedes={sedes as any[]}
+        usuarios={pageData.usuarios as any[]}
+        sedes={pageData.sedes as any[]}
         currentUserId={usuarioActual.id}
         canAssignSuperAdmin={esSuperAdmin}
         canCreateUsers={esSuperAdmin || esAdmin}

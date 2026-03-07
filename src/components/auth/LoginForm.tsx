@@ -20,6 +20,7 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const searchParams = useSearchParams()
+  const publicSedeSlug = searchParams.get('publicSedeSlug') || undefined
 
   const {
     register,
@@ -41,7 +42,10 @@ export function LoginForm() {
   const onSubmit = async (data: LoginInput) => {
     setLoading(true)
     try {
-      const result = await login(data)
+      const result = await login({
+        ...data,
+        publicSedeSlug,
+      })
 
       if (result?.error) {
         toast.error(result.error)
@@ -49,6 +53,17 @@ export function LoginForm() {
       }
       // Si no hay error, se redirige automáticamente.
     } catch (error) {
+      // En server actions, redirect() puede llegar aquí como NEXT_REDIRECT.
+      // No debe mostrarse como error al usuario.
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'digest' in error &&
+        typeof (error as { digest?: unknown }).digest === 'string' &&
+        (error as { digest: string }).digest.includes('NEXT_REDIRECT')
+      ) {
+        return
+      }
       console.error('[LoginForm] Error inesperado:', error)
       toast.error('Error inesperado al iniciar sesión. Por favor, intenta nuevamente.')
       setLoading(false)

@@ -13,7 +13,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-export function RegisterForm() {
+interface RegisterFormProps {
+  publicSedeSlug?: string
+}
+
+export function RegisterForm({ publicSedeSlug }: RegisterFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -29,13 +33,17 @@ export function RegisterForm() {
   const onSubmit = async (data: RegisterInput) => {
     setLoading(true)
     try {
-      const result = await registerUser(data)
+      const result = await registerUser({
+        ...data,
+        publicSedeSlug,
+      })
 
       if (result.error) {
         toast.error(result.error)
       } else {
         toast.success('Cuenta creada exitosamente. Por favor inicia sesión.')
-        router.push('/login')
+        const target = publicSedeSlug ? `/login?publicSedeSlug=${encodeURIComponent(publicSedeSlug)}` : '/login'
+        router.push(target)
       }
     } catch (error) {
       toast.error('Error al crear la cuenta')

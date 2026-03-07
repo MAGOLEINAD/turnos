@@ -115,7 +115,13 @@ export default async function AdminCalendarioPage({ searchParams }: AdminCalenda
               id,
               usuarios (nombre, apellido)
             ),
-            sedes (nombre)
+            sedes (nombre),
+            cuotas_mensuales (
+              anio,
+              mes,
+              estado,
+              fecha_limite_final
+            )
           `
           )
           .eq('activo', true)
@@ -160,7 +166,11 @@ export default async function AdminCalendarioPage({ searchParams }: AdminCalenda
   for (const ocurrencia of ocurrencias) {
     const horario = horariosFijos.find((h: any) => h.id === ocurrencia.horarioFijoId)
     if (!horario) continue
-    const evento = horarioFijoToEvent(horario, ocurrencia.fecha)
+    const evento = horarioFijoToEvent(
+      horario,
+      ocurrencia.fecha,
+      (ocurrencia as any).estadoCuota
+    )
     eventos.push({
       ...evento,
       start: evento.start instanceof Date ? evento.start.toISOString() : evento.start,

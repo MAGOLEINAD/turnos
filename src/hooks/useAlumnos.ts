@@ -5,6 +5,7 @@ import {
   crearAlumno,
   actualizarAlumno,
   desactivarAlumno,
+  obtenerCreditosAlumno,
 } from '@/lib/actions/alumnos.actions'
 import type { AlumnoInput } from '@/lib/validations/alumno.schema'
 
@@ -86,5 +87,19 @@ export function useEliminarAlumno() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alumnos'] })
     },
+  })
+}
+
+// Hook para obtener créditos de un alumno
+export function useCreditosAlumno(alumnoId: string, sedeId?: string) {
+  return useQuery({
+    queryKey: ['creditos-alumno', alumnoId, sedeId],
+    queryFn: async () => {
+      const result = await obtenerCreditosAlumno(alumnoId, sedeId)
+      if (result.error) throw new Error(result.error)
+      return result.data || []
+    },
+    enabled: !!alumnoId,
+    staleTime: 1000 * 60, // 1 minuto - los créditos pueden cambiar
   })
 }

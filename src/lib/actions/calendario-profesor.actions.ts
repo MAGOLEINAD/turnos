@@ -31,7 +31,13 @@ export async function obtenerDatosCalendarioProfesor(profesorId: string) {
           id,
           usuarios (nombre, apellido)
         ),
-        sedes (nombre)
+        sedes (nombre),
+        cuotas_mensuales (
+          anio,
+          mes,
+          estado,
+          fecha_limite_final
+        )
       `)
       .eq('activo', true)
       .eq('profesor_id', profesorId)
@@ -101,7 +107,13 @@ export async function obtenerDatosAgendaProfesor(profesorIds: string[]) {
           id,
           usuarios (nombre, apellido)
         ),
-        sedes (nombre)
+        sedes (nombre),
+        cuotas_mensuales (
+          anio,
+          mes,
+          estado,
+          fecha_limite_final
+        )
       `)
       .eq('activo', true)
       .in('profesor_id', profesorIds)
@@ -131,4 +143,3 @@ export async function obtenerDatosAgendaProfesor(profesorIds: string[]) {
     },
   }
 }
-

@@ -352,6 +352,139 @@ export async function getSedesParaAsignacion() {
   return { data: data || [], error: null }
 }
 
+export async function getUsuariosAdminPageData() {
+  const usuario = await getUser()
+
+  if (!usuario) {
+    return { error: 'No autenticado', usuario: null, usuarios: [], sedes: [] }
+  }
+
+  const permisos = await getActorPermisos(usuario)
+  const { esSuperAdmin, esAdmin, organizacionesAdmin } = permisos
+
+  if (!esSuperAdmin && !esAdmin) {
+    return {
+      error: 'No autorizado. Solo admin o super admin pueden ver usuarios.',
+      usuario,
+      usuarios: [],
+      sedes: [],
+    }
+  }
+
+  const supabase = createServiceRoleClient()
+
+  const usuariosPromise = (async () => {
+    if (!esSuperAdmin) {
+      if (organizacionesAdmin.length === 0) {
+        return { data: [], error: null as string | null }
+      }
+
+      const { data: membershipsScope, error: membershipsScopeError } = await supabase
+        .from('membresias')
+        .select('usuario_id')
+        .in('organizacion_id', organizacionesAdmin)
+        .eq('activa', true)
+
+      if (membershipsScopeError) {
+        return { data: [], error: membershipsScopeError.message }
+      }
+
+      let createdByOrgIds: string[] = []
+      const createdByOrgResult = await supabase
+        .from('usuarios')
+        .select('id')
+        .in('created_by_organizacion_id', organizacionesAdmin)
+
+      if (!createdByOrgResult.error) {
+        createdByOrgIds = (createdByOrgResult.data || []).map((u: any) => u.id)
+      }
+
+      const userIds = Array.from(
+        new Set([
+          usuario.id,
+          ...((membershipsScope || []).map((m: any) => m.usuario_id).filter(Boolean)),
+          ...createdByOrgIds,
+        ])
+      )
+
+      if (userIds.length === 0) {
+        return { data: [], error: null as string | null }
+      }
+
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select(`
+          *,
+          membresias (
+            id,
+            rol,
+            sede_id,
+            organizacion_id,
+            activa
+          )
+        `)
+        .in('id', userIds)
+        .order('created_at', { ascending: false })
+
+      if (error) return { data: [], error: error.message }
+      return { data: data || [], error: null as string | null }
+    }
+
+    const { data, error } = await supabase
+      .from('usuarios')
+      .select(`
+        *,
+        membresias (
+          id,
+          rol,
+          sede_id,
+          organizacion_id,
+          activa
+        )
+      `)
+      .order('created_at', { ascending: false })
+
+    if (error) return { data: [], error: error.message }
+    return { data: data || [], error: null as string | null }
+  })()
+
+  const sedesPromise = (async () => {
+    let query = supabase
+      .from('sedes')
+      .select('id, nombre, organizacion_id, organizaciones(nombre, icono)')
+      .eq('activa', true)
+      .order('nombre', { ascending: true })
+
+    if (!esSuperAdmin) {
+      if (organizacionesAdmin.length === 0) {
+        return { data: [], error: null as string | null }
+      }
+      query = query.in('organizacion_id', organizacionesAdmin)
+    }
+
+    const { data, error } = await query
+    if (error) return { data: [], error: error.message }
+    return { data: data || [], error: null as string | null }
+  })()
+
+  const [usuariosResult, sedesResult] = await Promise.all([usuariosPromise, sedesPromise])
+
+  if (usuariosResult.error) {
+    return { error: usuariosResult.error, usuario, usuarios: [], sedes: [] }
+  }
+
+  if (sedesResult.error) {
+    return { error: sedesResult.error, usuario, usuarios: [], sedes: [] }
+  }
+
+  return {
+    error: null,
+    usuario,
+    usuarios: usuariosResult.data,
+    sedes: sedesResult.data,
+  }
+}
+
 export async function obtenerConfigAccesoUsuario(input: { usuarioId: string; organizacionId: string }) {
   const usuario = await getUser()
   if (!usuario) return { error: 'No autenticado' }

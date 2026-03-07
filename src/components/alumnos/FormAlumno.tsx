@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { crearAlumno, actualizarAlumno, obtenerUsuariosDisponiblesParaAlumnos } from '@/lib/actions/alumnos.actions'
+import { obtenerHistorialPagosAlumno } from '@/lib/actions/pagos.actions'
 import { alumnoSchema, type AlumnoInput } from '@/lib/validations/alumno.schema'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -14,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StatusAlert } from '@/components/ui/status-alert'
+import { HistorialPagosPanel } from './HistorialPagosPanel'
 
 interface FormAlumnoProps {
   open: boolean
@@ -33,6 +35,8 @@ export function FormAlumno({
   const [loading, setLoading] = useState(false)
   const [usuarios, setUsuarios] = useState<any[]>([])
   const [loadingUsuarios, setLoadingUsuarios] = useState(true)
+  const [pagosHistorial, setPagosHistorial] = useState<any[]>([])
+  const [loadingPagosHistorial, setLoadingPagosHistorial] = useState(false)
 
   const isEdit = !!alumno
 
@@ -85,6 +89,24 @@ export function FormAlumno({
       cargarUsuariosDisponibles()
     }
   }, [open, isEdit, cargarUsuariosDisponibles])
+
+  useEffect(() => {
+    if (!open || !isEdit || !alumno?.id || !alumno?.sede_id) return
+
+    const cargarPagos = async () => {
+      setLoadingPagosHistorial(true)
+      const result = await obtenerHistorialPagosAlumno(alumno.id, alumno.sede_id)
+      if (result.error) {
+        toast.error(result.error)
+        setPagosHistorial([])
+      } else {
+        setPagosHistorial(result.data || [])
+      }
+      setLoadingPagosHistorial(false)
+    }
+
+    cargarPagos()
+  }, [open, isEdit, alumno])
 
   const onSubmit = async (data: AlumnoInput) => {
     setLoading(true)
@@ -242,6 +264,20 @@ export function FormAlumno({
               {isEdit ? 'Actualizar' : 'Crear Alumno'}
             </LoadingButton>
           </div>
+
+          {isEdit ? (
+            <div className="pt-2">
+              {loadingPagosHistorial ? (
+                <p className="text-sm text-muted-foreground">Cargando historial de pagos...</p>
+              ) : (
+                <HistorialPagosPanel
+                  pagos={pagosHistorial}
+                  title="Historial de pagos del alumno"
+                  emptyMessage="Este alumno no tiene pagos registrados."
+                />
+              )}
+            </div>
+          ) : null}
         </form>
       </DialogContent>
     </Dialog>

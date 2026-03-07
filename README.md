@@ -105,7 +105,7 @@ No se mantiene documentacion historica de avance por fases en archivos separados
 ## Plan activo: Calendario v2 (automatizacion + actividades + cobros)
 
 Ultima actualizacion: 2026-03-07
-Estado general: Pendiente de implementacion
+Estado general: En implementacion
 
 ### Objetivo
 
@@ -119,6 +119,9 @@ Implementar un calendario unificado por sede con actividades recurrentes, asigna
 - La clase de prueba es unica: maximo 1 por alumno (global).
 - Si la reserva queda como prueba, se marca en estado `primera_clase`.
 - El alumno debe completar la cuota como maximo el dia anterior a su proxima clase.
+- La cuota mensual vence el dia 10 de cada mes.
+- Solo admin puede otorgar una prorroga excepcional de hasta 10 dias corridos adicionales.
+- Sin pago (o prorroga vigente), no se materializan nuevas clases recurrentes del periodo siguiente.
 - La baja de horario fijo puede ser inmediata o a fin de mes (elegible en UI).
 - Si es baja a fin de mes, el cupo se mantiene ocupado hasta fin de mes.
 - Las actividades reemplazan el tipo actual `individual/grupal`.
@@ -170,8 +173,8 @@ Implementar un calendario unificado por sede con actividades recurrentes, asigna
 #### Fase 2 - Flujo de calendario y reglas de disponibilidad
 - [x] Cambiar UI de alta de reserva: seleccionar actividad (no tipo).
 - [x] Restringir selector a actividades habilitadas para el profesor.
-- [ ] Recurrentes: crear series controladas (sin expandir infinito en DB).
-- [ ] Implementar clases extras de una sola vez.
+- [x] Recurrentes: crear series controladas (sin expandir infinito en DB).
+- [x] Implementar clases extras de una sola vez.
 - [x] Endurecer chequeo de conflictos: reservas + bloqueos + horarios fijos.
 
 #### Fase 3 - Gestion de conflicto bloqueo vs horario fijo
@@ -183,26 +186,38 @@ Implementar un calendario unificado por sede con actividades recurrentes, asigna
 - [x] Persistir auditoria de resolucion de conflicto.
 
 #### Fase 4 - Calendario publico + alta automatica alumno
-- [ ] Mantener vista publica de disponibilidad por sede/actividad.
-- [ ] Si quiere reservar, redirigir a auth y retomar flujo post-login.
-- [ ] Auto-asignar membresia `alumno` en sede origen luego de auth.
-- [ ] Confirmar reserva solo tras pago aprobado.
+- [x] Mantener vista publica de disponibilidad por sede/actividad.
+- [x] Si quiere reservar, redirigir a auth y retomar flujo post-login.
+- [x] Auto-asignar membresia `alumno` en sede origen luego de auth.
+- [x] Confirmar reserva solo tras pago aprobado.
 
 #### Fase 5 - Cobros Mercado Pago (MVP rapido)
-- [ ] Implementar `Checkout Pro` para reserva puntual.
-- [ ] Implementar `Checkout Pro` para sena de primera clase.
-- [ ] Permitir decision post-prueba:
-  - [ ] pagar cuota completa
-  - [ ] descontar sena de cuota
-- [ ] Bloquear futuras reservas recurrentes si no cumple regla de pago.
+- [x] Implementar `Checkout Pro` para reserva puntual.
+- [x] Implementar `Checkout Pro` para sena de primera clase.
+- [x] Permitir decision post-prueba:
+  - [x] pagar cuota completa
+  - [x] descontar sena de cuota
+- [x] Bloquear futuras reservas recurrentes si no cumple regla de pago.
 - [x] Implementar registro manual de pago (admin/profesor autorizado).
 - [x] Unificar estados de pago digital y manual en una sola logica de confirmacion de reserva.
-- [ ] Mostrar historial de pagos (digitales y manuales) en ficha de alumno/reserva.
+- [x] Mostrar historial de pagos (digitales y manuales) en ficha de alumno/reserva.
+
+Nota: Checkout Pro y webhook quedaron implementados a nivel backend; resta robustecer estados finales ante webhooks repetidos e inconsistencias de sincronizacion.
 
 #### Fase 6 - Bajas de horarios fijos y ciclo mensual
-- [ ] UI con opcion de baja inmediata o fin de mes.
-- [ ] Lógica de efectivizacion segun opcion elegida.
-- [ ] Mantener cupo tomado hasta fecha efectiva de baja.
+- [x] UI con opcion de baja inmediata o fin de mes.
+- [x] Logica de efectivizacion segun opcion elegida.
+- [x] Mantener cupo tomado hasta fecha efectiva de baja.
+
+#### Fase 6.1 - Cuotas mensuales y prorrogas
+- [x] Definir estado mensual de cuota por alumno/sede/actividad.
+- [x] Aplicar vencimiento fijo al dia 10 de cada mes.
+- [x] Bloquear materializacion de recurrencias si cuota vencida.
+- [x] Habilitar pago digital/manual desde panel alumno y admin.
+- [x] Permitir prorroga solo por admin (maximo 10 dias, una por periodo).
+- [x] Registrar auditoria de prorrogas (quien, cuando, motivo, nueva fecha limite).
+
+Nota: panel alumno (checkout) y panel admin (pago manual + prorroga) ya operativos. Resta robustecer validaciones de negocio para escenarios edge.
 
 #### Fase 7 - Reportes in-app
 - [ ] Ingresos cobrados por periodo/sede/actividad.
