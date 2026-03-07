@@ -1,9 +1,16 @@
 import { CalendarioProfesor } from '@/components/calendario/CalendarioProfesor'
+import { SedeContextSelector } from '@/components/sedes/SedeContextSelector'
 import { getUser } from '@/lib/actions/auth.actions'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
-export default async function ProfesorCalendarioPage() {
+interface ProfesorCalendarioPageProps {
+  searchParams?: {
+    sede?: string
+  }
+}
+
+export default async function ProfesorCalendarioPage({ searchParams }: ProfesorCalendarioPageProps) {
   const usuario = await getUser()
 
   if (!usuario) {
@@ -11,16 +18,24 @@ export default async function ProfesorCalendarioPage() {
   }
 
   // Obtener datos del profesor
-  const supabase = await createClient()
-  const { data: profesor } = await supabase
+  const supabase = createServiceRoleClient()
+  const { data: perfilesProfesor } = await supabase
     .from('profesores')
-    .select('id, sede_id')
+    .select(
+      `
+      id,
+      sede_id,
+      sedes (
+        id,
+        nombre
+      )
+    `
+    )
     .eq('usuario_id', usuario.id)
     .eq('activo', true)
-    .limit(1)
-    .maybeSingle()
+    .order('created_at', { ascending: true })
 
-  if (!profesor) {
+  if (!perfilesProfesor || perfilesProfesor.length === 0) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">
@@ -29,6 +44,16 @@ export default async function ProfesorCalendarioPage() {
       </div>
     )
   }
+
+  const perfiles = perfilesProfesor as any[]
+  const sedeSeleccionada =
+    (searchParams?.sede && perfiles.find((perfil) => perfil.sede_id === searchParams.sede)?.sede_id) ||
+    perfiles[0].sede_id
+  const perfilSeleccionado = perfiles.find((perfil) => perfil.sede_id === sedeSeleccionada) || perfiles[0]
+  const sedesDisponibles = perfiles.map((perfil) => ({
+    id: perfil.sede_id,
+    nombre: perfil.sedes?.nombre || 'Sede sin nombre',
+  }))
 
   return (
     <div>
@@ -39,10 +64,14 @@ export default async function ProfesorCalendarioPage() {
         </p>
       </div>
 
+      <div className="mb-6 max-w-md">
+        <SedeContextSelector sedes={sedesDisponibles} sedeSeleccionada={sedeSeleccionada} showAllOption={false} />
+      </div>
+
       <CalendarioProfesor
         usuarioId={usuario.id}
-        profesorId={profesor.id}
-        sedeId={profesor.sede_id}
+        profesorId={perfilSeleccionado.id}
+        sedeId={perfilSeleccionado.sede_id}
       />
     </div>
   )

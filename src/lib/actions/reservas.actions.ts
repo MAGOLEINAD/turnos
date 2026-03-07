@@ -77,6 +77,7 @@ export async function crearReserva(data: ReservaInput) {
   }
 
   revalidatePath('/profesor/calendario')
+  revalidatePath('/profesor/agenda')
   revalidatePath('/alumno/calendario')
   revalidatePath('/alumno/creditos')
   return { data: reserva, creditoUsado: !!data.usar_credito }
@@ -160,6 +161,7 @@ export async function cancelarReserva(input: CancelarReservaInput) {
   }
 
   revalidatePath('/profesor/calendario')
+  revalidatePath('/profesor/agenda')
   revalidatePath('/alumno/calendario')
   revalidatePath('/alumno/creditos')
 
@@ -214,6 +216,7 @@ export async function inscribirseReservaGrupal(reservaId: string, alumnoId: stri
   if (inscripcionError) return { error: inscripcionError.message }
 
   revalidatePath('/profesor/calendario')
+  revalidatePath('/profesor/agenda')
   revalidatePath('/alumno/calendario')
 
   return { success: true }
@@ -256,6 +259,7 @@ export async function desinscribirseReservaGrupal(participanteId: string) {
   const generoCredito = horasAnticipacion >= CANCELACION_MIN_HORAS
 
   revalidatePath('/profesor/calendario')
+  revalidatePath('/profesor/agenda')
   revalidatePath('/alumno/calendario')
   revalidatePath('/alumno/creditos')
 
@@ -272,11 +276,34 @@ async function verificarDisponibilidadProfesor(
 ): Promise<boolean> {
   const supabase = await createClient()
 
-  // Verificar reservas existentes
+  // Resolver todos los perfiles de profesor del mismo usuario para evitar
+  // solapamientos entre sedes (agenda global del profesor).
+  const { data: perfilBase } = await supabase
+    .from('profesores')
+    .select('usuario_id')
+    .eq('id', profesorId)
+    .single()
+
+  if (!perfilBase?.usuario_id) {
+    return false
+  }
+
+  const { data: perfilesProfesor } = await supabase
+    .from('profesores')
+    .select('id')
+    .eq('usuario_id', perfilBase.usuario_id)
+    .eq('activo', true)
+
+  const profesorIds = (perfilesProfesor || []).map((p) => p.id).filter(Boolean)
+  if (profesorIds.length === 0) {
+    return false
+  }
+
+  // Verificar reservas existentes en todas sus sedes
   const { data: reservas } = await supabase
     .from('reservas')
     .select('id')
-    .eq('profesor_id', profesorId)
+    .in('profesor_id', profesorIds)
     .eq('estado', 'confirmada')
     .or(`and(fecha_inicio.lt.${fechaFin.toISOString()},fecha_fin.gt.${fechaInicio.toISOString()})`)
 

@@ -1,6 +1,6 @@
 import { CalendarioAlumno } from '@/components/calendario/CalendarioAlumno'
 import { getUser } from '@/lib/actions/auth.actions'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
 export default async function AlumnoCalendarioPage() {
@@ -11,7 +11,7 @@ export default async function AlumnoCalendarioPage() {
   }
 
   // Obtener datos del alumno
-  const supabase = await createClient()
+  const supabase = createServiceRoleClient()
   const { data: alumno } = await supabase
     .from('alumnos')
     .select('id, sede_id')

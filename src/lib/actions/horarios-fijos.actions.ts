@@ -43,6 +43,7 @@ export async function crearHorarioFijo(data: HorarioFijoInput) {
   if (error) return { error: error.message }
 
   revalidatePath('/profesor/calendario')
+  revalidatePath('/profesor/agenda')
   revalidatePath('/alumno/horarios')
   revalidatePath('/admin/horarios-fijos')
   return { data: horarioFijo }
@@ -126,6 +127,7 @@ export async function darDeBajaHorarioFijo(input: BajaHorarioFijoInput) {
   if (insertError) return { error: insertError.message }
 
   revalidatePath('/profesor/calendario')
+  revalidatePath('/profesor/agenda')
   revalidatePath('/alumno/horarios')
   revalidatePath('/admin/horarios-fijos')
 

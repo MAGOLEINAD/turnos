@@ -44,6 +44,7 @@ export async function crearBloqueo(data: BloqueoInput) {
   if (error) return { error: error.message }
 
   revalidatePath('/profesor/calendario')
+  revalidatePath('/profesor/agenda')
   revalidatePath('/admin/bloqueos')
   return { data: bloqueo }
 }
@@ -88,6 +89,7 @@ export async function eliminarBloqueo(bloqueoId: string) {
   if (error) return { error: error.message }
 
   revalidatePath('/profesor/calendario')
+  revalidatePath('/profesor/agenda')
   revalidatePath('/admin/bloqueos')
   return { success: true }
 }

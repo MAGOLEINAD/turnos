@@ -350,6 +350,38 @@ export async function activarProfesor(id: string) {
   return { success: true }
 }
 
+export async function eliminarProfesor(id: string) {
+  const actor = await getActorScope()
+  if (!actor.scope) return { error: actor.error || 'No autenticado' }
+
+  if (!canManageProfesores(actor.scope)) {
+    return { error: 'No autorizado para eliminar profesores.' }
+  }
+
+  const supabase = createServiceRoleClient()
+
+  const { data: actual } = await supabase
+    .from('profesores')
+    .select('id, sede_id')
+    .eq('id', id)
+    .single()
+
+  if (!actual) return { error: 'Profesor no encontrado.' }
+
+  const sedeCheck = await canAccessSede(supabase, actor.scope, actual.sede_id)
+  if (!sedeCheck.ok) return { error: sedeCheck.error }
+
+  const { error } = await supabase
+    .from('profesores')
+    .delete()
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  safeRevalidate('/admin/profesores', '/super-admin/profesores', '/profesor/calendario')
+  return { success: true }
+}
+
 export async function obtenerUsuariosDisponibles(sedeId: string) {
   return obtenerUsuariosDisponiblesPorSedes([sedeId])
 }

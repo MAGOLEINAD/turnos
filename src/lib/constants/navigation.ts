@@ -75,7 +75,11 @@ export const NAV_PROFESOR: NavItem[] = [
     href: '/dashboard',
   },
   {
-    title: 'Calendario',
+    title: 'Mi Agenda',
+    href: '/profesor/agenda',
+  },
+  {
+    title: 'Calendario Sede',
     href: '/profesor/calendario',
   },
   {
@@ -162,7 +166,7 @@ export function getDashboardRoute(rol: RolUsuario): string {
     case ROLES.ADMIN:
       return '/admin/sedes'
     case ROLES.PROFESOR:
-      return '/profesor/calendario'
+      return '/profesor/agenda'
     case ROLES.ALUMNO:
       return '/alumno/calendario'
     default:

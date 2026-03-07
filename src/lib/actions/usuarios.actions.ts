@@ -376,6 +376,40 @@ export async function asignarRolUsuario(input: AsignarRolInput) {
     return { error: error.message }
   }
 
+  if (input.rol === 'profesor') {
+    const { error: profesorError } = await supabase
+      .from('profesores')
+      .upsert(
+        {
+          usuario_id: input.usuarioId,
+          sede_id: input.sedeId,
+          activo: true,
+        },
+        { onConflict: 'usuario_id,sede_id' }
+      )
+
+    if (profesorError) {
+      return { error: profesorError.message }
+    }
+  }
+
+  if (input.rol === 'alumno') {
+    const { error: alumnoError } = await supabase
+      .from('alumnos')
+      .upsert(
+        {
+          usuario_id: input.usuarioId,
+          sede_id: input.sedeId,
+          activo: true,
+        },
+        { onConflict: 'usuario_id,sede_id' }
+      )
+
+    if (alumnoError) {
+      return { error: alumnoError.message }
+    }
+  }
+
   revalidatePath('/super-admin/usuarios')
   revalidatePath('/admin/usuarios')
   return { success: true }
@@ -425,6 +459,32 @@ export async function quitarRolUsuario(input: QuitarRolInput) {
 
   if (error) {
     return { error: error.message }
+  }
+
+  if (input.rol === 'profesor' && input.sedeId) {
+    const { error: profesorError } = await supabase
+      .from('profesores')
+      .update({ activo: false })
+      .eq('usuario_id', input.usuarioId)
+      .eq('sede_id', input.sedeId)
+      .eq('activo', true)
+
+    if (profesorError) {
+      return { error: profesorError.message }
+    }
+  }
+
+  if (input.rol === 'alumno' && input.sedeId) {
+    const { error: alumnoError } = await supabase
+      .from('alumnos')
+      .update({ activo: false })
+      .eq('usuario_id', input.usuarioId)
+      .eq('sede_id', input.sedeId)
+      .eq('activo', true)
+
+    if (alumnoError) {
+      return { error: alumnoError.message }
+    }
   }
 
   revalidatePath('/super-admin/usuarios')

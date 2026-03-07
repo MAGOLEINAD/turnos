@@ -2,11 +2,13 @@
 
 import { useState } from 'react'
 import { FormProfesor } from './FormProfesor'
-import { desactivarProfesor, activarProfesor } from '@/lib/actions/profesores.actions'
+import { desactivarProfesor, activarProfesor, eliminarProfesor } from '@/lib/actions/profesores.actions'
 import { TIPO_AUTORIZACION_PROFESOR_LABELS } from '@/lib/constants/estados'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { Edit, UserX, UserCheck, Mail, Phone } from 'lucide-react'
 
@@ -20,6 +22,9 @@ export function ProfesoresList({ profesores: profesoresIniciales, sedeId, sedes 
   const [modalOpen, setModalOpen] = useState(false)
   const [profesorEditar, setProfesorEditar] = useState<any>(null)
   const [profesores, setProfesores] = useState(profesoresIniciales)
+  const [modalAccionOpen, setModalAccionOpen] = useState(false)
+  const [profesorAccion, setProfesorAccion] = useState<any>(null)
+  const [loadingAccion, setLoadingAccion] = useState(false)
 
   const handleNuevoProfesor = () => {
     setProfesorEditar(null)
@@ -37,17 +42,19 @@ export function ProfesoresList({ profesores: profesoresIniciales, sedeId, sedes 
   }
 
   const handleToggleActivo = async (profesor: any) => {
+    if (profesor.activo) {
+      setProfesorAccion(profesor)
+      setModalAccionOpen(true)
+      return
+    }
+
     try {
-      const result = profesor.activo
-        ? await desactivarProfesor(profesor.id)
-        : await activarProfesor(profesor.id)
+      const result = await activarProfesor(profesor.id)
 
       if (result.error) {
         toast.error(result.error)
       } else {
-        toast.success(
-          profesor.activo ? 'Profesor desactivado' : 'Profesor activado'
-        )
+        toast.success('Profesor activado')
         // Actualizar estado local
         setProfesores((prev) =>
           prev.map((p) =>
@@ -57,6 +64,54 @@ export function ProfesoresList({ profesores: profesoresIniciales, sedeId, sedes 
       }
     } catch (error) {
       toast.error('Error al cambiar el estado del profesor')
+    }
+  }
+
+  const handleDesactivarProfesor = async () => {
+    if (!profesorAccion) return
+
+    setLoadingAccion(true)
+    try {
+      const result = await desactivarProfesor(profesorAccion.id)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success('Profesor desactivado')
+      setProfesores((prev) =>
+        prev.map((p) =>
+          p.id === profesorAccion.id ? { ...p, activo: false } : p
+        )
+      )
+      setModalAccionOpen(false)
+      setProfesorAccion(null)
+    } catch (error) {
+      toast.error('Error al desactivar el profesor')
+    } finally {
+      setLoadingAccion(false)
+    }
+  }
+
+  const handleEliminarProfesor = async () => {
+    if (!profesorAccion) return
+
+    setLoadingAccion(true)
+    try {
+      const result = await eliminarProfesor(profesorAccion.id)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success('Profesor eliminado permanentemente')
+      setProfesores((prev) => prev.filter((p) => p.id !== profesorAccion.id))
+      setModalAccionOpen(false)
+      setProfesorAccion(null)
+    } catch (error) {
+      toast.error('Error al eliminar el profesor')
+    } finally {
+      setLoadingAccion(false)
     }
   }
 
@@ -205,6 +260,79 @@ export function ProfesoresList({ profesores: profesoresIniciales, sedeId, sedes 
         sedes={sedes}
         onSuccess={handleSuccess}
       />
+
+      <Dialog
+        open={modalAccionOpen}
+        onOpenChange={(open) => {
+          if (loadingAccion) return
+          setModalAccionOpen(open)
+          if (!open) setProfesorAccion(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Gestionar estado del profesor</DialogTitle>
+            <DialogDescription>
+              Elige que deseas hacer con{' '}
+              <span className="font-medium text-foreground">
+                {profesorAccion?.usuarios?.nombre} {profesorAccion?.usuarios?.apellido}
+              </span>
+              .
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 text-sm">
+            <div className="rounded-md border p-3">
+              <p className="font-medium">Desactivar</p>
+              <p className="text-muted-foreground">
+                El profesor deja de estar disponible en calendario, pero su perfil se conserva y puedes reactivarlo
+                cuando quieras.
+              </p>
+            </div>
+            <div className="rounded-md border border-destructive/30 p-3">
+              <p className="font-medium text-destructive">Borrar permanentemente</p>
+              <p className="text-muted-foreground">
+                Se elimina el registro de profesor en esta sede. Esta accion no se puede deshacer.
+              </p>
+              <p className="mt-2 text-muted-foreground">
+                Luego podras volver a asignar este mismo usuario como profesor desde el alta.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loadingAccion}
+              onClick={() => {
+                setModalAccionOpen(false)
+                setProfesorAccion(null)
+              }}
+            >
+              Cancelar
+            </Button>
+            <LoadingButton
+              type="button"
+              variant="outline"
+              loading={loadingAccion}
+              loadingText="Procesando..."
+              onClick={handleDesactivarProfesor}
+            >
+              Desactivar
+            </LoadingButton>
+            <LoadingButton
+              type="button"
+              variant="destructive"
+              loading={loadingAccion}
+              loadingText="Eliminando..."
+              onClick={handleEliminarProfesor}
+            >
+              Borrar permanentemente
+            </LoadingButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
