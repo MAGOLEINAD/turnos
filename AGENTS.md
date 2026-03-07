@@ -1,51 +1,55 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure & Module Organization
-This is a Next.js 14 App Router project with TypeScript.
+## Objetivo
 
-- `src/app/`: routes and layouts by area, including `(auth)`, `(dashboard)`, `(public)`, and `api/`.
-- `src/components/`: UI and feature components (`ui/`, `auth/`, `calendario/`, `layout/`).
-- `src/lib/`: business logic (`actions/`, `supabase/`, `validations/`, `utils/`, `hooks/`, `constants/`).
-- `supabase/migrations/`: SQL schema, RLS policies, and DB fixes.
-- Root config: `middleware.ts`, `tailwind.config.ts`, `tsconfig.json`, `.env(.example)`.
+Este archivo define como debe colaborar cualquier agente (Codex u otros) dentro de este repositorio.
 
-## Build, Test, and Development Commands
-- `npm run dev`: starts local dev server.
-- `npm run build`: creates production build.
-- `npm start`: serves the production build.
-- `npm run lint`: runs Next.js ESLint checks.
-- `npm run type-check`: runs strict TypeScript checks (`tsc --noEmit`).
+## Contexto del proyecto
 
-Recommended local validation before PR:
-`npm run lint && npm run type-check && npm run build`
+- Stack: Next.js 14 App Router + TypeScript strict + Supabase + Tailwind.
+- Idioma del producto: espanol.
+- Rutas principales en `src/app/(auth)`, `src/app/(dashboard)` y `src/app/(public)`.
+- Logica de negocio en `src/lib/actions`.
 
-## Coding Style & Naming Conventions
-- Language: TypeScript in strict mode.
-- Indentation: 2 spaces; keep code and comments concise.
-- Components: `PascalCase` files and exports (example: `LoginForm.tsx`).
-- Hooks: `useXxx` naming (example: `useAuth.ts`).
-- Server Actions: grouped in `src/lib/actions/*`.
-- Use path alias `@/` for imports from `src/`.
-- Keep UI styling in Tailwind utility classes; reuse `src/components/ui` primitives when possible.
+## Reglas de trabajo
 
-## Testing Guidelines
-There is currently no automated test framework configured (`test` script is absent). For now:
-- Run lint, type-check, and build on every change.
-- Manually verify impacted flows (auth, role redirects, dashboard pages, Supabase-integrated paths).
-- When adding tests, prefer colocated `*.test.ts(x)` or `*.spec.ts(x)` near related modules.
+1. No asumir estado funcional sin verificar codigo real.
+2. Mantener cambios pequenos, reversibles y consistentes con el patron actual.
+3. No tocar migraciones historicas en `supabase/migrations`.
+4. Usar imports con alias `@/` cuando aplique.
+5. Preservar TypeScript strict y evitar `any` innecesario.
+6. Reutilizar componentes de `src/components/ui` antes de crear nuevos.
 
-## Commit & Pull Request Guidelines
-Git history is not established yet (no commits in `master`), so use Conventional Commits:
-- `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`.
+## Convenciones
 
-PRs should include:
-- Clear summary and scope.
-- Linked issue/task ID (if applicable).
-- Screenshots/video for UI changes.
-- Notes on migrations/env changes (especially files under `supabase/migrations/`).
-- A short validation checklist with commands executed.
+- Componentes: `PascalCase.tsx`
+- Hooks: `useXxx.ts`
+- Schemas Zod: `*.schema.ts`
+- Actions: `*.actions.ts`
+- Indentacion: 2 espacios
 
-## Security & Configuration Tips
-- Never commit secrets; keep them in `.env.local`.
-- Required Supabase variables must be set before running auth flows.
-- Treat RLS/policy changes as high impact: document behavior changes in the PR.
+## Validacion minima por cambio
+
+Ejecutar cuando corresponda:
+
+```bash
+npm run lint
+npm run type-check
+npm run build
+```
+
+## Politica de documentacion
+
+Documentacion viva permitida:
+
+- `README.md`: setup y estado operativo actual.
+- `AGENTS.md`: reglas para agentes.
+- `supabase/SQL_STRUCTURE.md`: normas SQL/migraciones.
+
+No crear ni mantener archivos de seguimiento temporal como planes de sesion, estados porcentuales o proximos pasos si duplican informacion del README.
+
+## Seguridad
+
+- No commitear secretos.
+- Usar `.env.local` para credenciales reales.
+- Tratar cambios RLS como alto impacto y documentarlos en PR.

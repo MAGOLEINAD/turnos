@@ -74,6 +74,14 @@ export function reservaToEvent(reserva: any): EventInput {
  */
 export function horarioFijoToEvent(horarioFijo: any, fecha: Date): EventInput {
   const [hora, minuto] = horarioFijo.hora_inicio.split(':').map(Number)
+  const duracionMinutos =
+    typeof horarioFijo.duracion_minutos === 'number'
+      ? horarioFijo.duracion_minutos
+      : (() => {
+          if (!horarioFijo.hora_fin) return 0
+          const [hFin, mFin] = String(horarioFijo.hora_fin).split(':').map(Number)
+          return Math.max(0, hFin * 60 + mFin - (hora * 60 + minuto))
+        })()
 
   const start = parseDate(fecha)
     .hour(hora)
@@ -83,7 +91,7 @@ export function horarioFijoToEvent(horarioFijo: any, fecha: Date): EventInput {
   const end = parseDate(fecha)
     .hour(hora)
     .minute(minuto)
-    .add(horarioFijo.duracion_minutos, 'minute')
+    .add(duracionMinutos, 'minute')
     .toDate()
 
   // Obtener nombre del alumno si está disponible

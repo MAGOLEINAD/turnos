@@ -1,4 +1,4 @@
-import { parseDate, sumarDias, esMismoDia } from './date'
+import { parseDate, sumarDias } from './date'
 import { DIA_SEMANA } from '../constants/estados'
 import type { Dayjs } from 'dayjs'
 
@@ -17,12 +17,15 @@ const DIA_A_NUMERO: Record<string, number> = {
 
 interface HorarioFijo {
   id: string
-  dia_semana_1: string
+  dias_semana?: string[] | null
+  dia_semana_1?: string
   dia_semana_2?: string | null
   dia_semana_3?: string | null
   hora_inicio: string
-  duracion_minutos: number
-  fecha_inicio_vigencia: string
+  hora_fin?: string | null
+  duracion_minutos?: number
+  fecha_inicio?: string
+  fecha_inicio_vigencia?: string
   activo: boolean
 }
 
@@ -46,18 +49,27 @@ export function generarOcurrenciasHorarioFijo(
   const ocurrencias: OcurrenciaHorarioFijo[] = []
   const inicio = parseDate(fechaInicio)
   const fin = parseDate(fechaFin)
-  const vigenciaInicio = parseDate(horarioFijo.fecha_inicio_vigencia)
+  const vigenciaInicio = parseDate(
+    horarioFijo.fecha_inicio || horarioFijo.fecha_inicio_vigencia || new Date().toISOString()
+  )
 
   // Obtener días de la semana del horario fijo
-  const diasSemana: number[] = []
-  if (horarioFijo.dia_semana_1) {
-    diasSemana.push(DIA_A_NUMERO[horarioFijo.dia_semana_1])
-  }
-  if (horarioFijo.dia_semana_2) {
-    diasSemana.push(DIA_A_NUMERO[horarioFijo.dia_semana_2])
-  }
-  if (horarioFijo.dia_semana_3) {
-    diasSemana.push(DIA_A_NUMERO[horarioFijo.dia_semana_3])
+  const diasRaw = Array.isArray(horarioFijo.dias_semana) && horarioFijo.dias_semana.length > 0
+    ? horarioFijo.dias_semana
+    : [horarioFijo.dia_semana_1, horarioFijo.dia_semana_2, horarioFijo.dia_semana_3].filter(Boolean)
+  const diasSemana: number[] = diasRaw
+    .filter((dia): dia is string => typeof dia === 'string')
+    .map((dia) => DIA_A_NUMERO[dia])
+    .filter((d): d is number => d !== undefined)
+
+  const getDuracionMinutos = () => {
+    if (typeof horarioFijo.duracion_minutos === 'number') return horarioFijo.duracion_minutos
+    if (horarioFijo.hora_inicio && horarioFijo.hora_fin) {
+      const [hIni, mIni] = horarioFijo.hora_inicio.split(':').map(Number)
+      const [hFin, mFin] = horarioFijo.hora_fin.split(':').map(Number)
+      return Math.max(0, hFin * 60 + mFin - (hIni * 60 + mIni))
+    }
+    return 0
   }
 
   // Iterar desde la fecha de inicio del rango (o desde vigencia si es posterior)
@@ -73,7 +85,7 @@ export function generarOcurrenciasHorarioFijo(
         horarioFijoId: horarioFijo.id,
         fecha: fechaActual.toDate(),
         horaInicio: horarioFijo.hora_inicio,
-        duracionMinutos: horarioFijo.duracion_minutos,
+        duracionMinutos: getDuracionMinutos(),
       })
     }
 
@@ -116,7 +128,9 @@ export function tieneOcurrenciaEnFecha(
   if (!horarioFijo.activo) return false
 
   const fechaParsed = parseDate(fecha)
-  const vigenciaInicio = parseDate(horarioFijo.fecha_inicio_vigencia)
+  const vigenciaInicio = parseDate(
+    horarioFijo.fecha_inicio || horarioFijo.fecha_inicio_vigencia || new Date().toISOString()
+  )
 
   // Verificar que la fecha sea después de la vigencia
   if (fechaParsed.isBefore(vigenciaInicio, 'day')) {
@@ -126,16 +140,13 @@ export function tieneOcurrenciaEnFecha(
   const diaSemana = fechaParsed.day()
 
   // Verificar si el día de la semana coincide
-  const diasSemana: number[] = []
-  if (horarioFijo.dia_semana_1) {
-    diasSemana.push(DIA_A_NUMERO[horarioFijo.dia_semana_1])
-  }
-  if (horarioFijo.dia_semana_2) {
-    diasSemana.push(DIA_A_NUMERO[horarioFijo.dia_semana_2])
-  }
-  if (horarioFijo.dia_semana_3) {
-    diasSemana.push(DIA_A_NUMERO[horarioFijo.dia_semana_3])
-  }
+  const diasRaw = Array.isArray(horarioFijo.dias_semana) && horarioFijo.dias_semana.length > 0
+    ? horarioFijo.dias_semana
+    : [horarioFijo.dia_semana_1, horarioFijo.dia_semana_2, horarioFijo.dia_semana_3].filter(Boolean)
+  const diasSemana: number[] = diasRaw
+    .filter((dia): dia is string => typeof dia === 'string')
+    .map((dia) => DIA_A_NUMERO[dia])
+    .filter((d): d is number => d !== undefined)
 
   return diasSemana.includes(diaSemana)
 }
@@ -150,20 +161,29 @@ export function proximaOcurrenciaHorarioFijo(
   if (!horarioFijo.activo) return null
 
   const desde = parseDate(desdeFecha || new Date())
-  const vigenciaInicio = parseDate(horarioFijo.fecha_inicio_vigencia)
+  const vigenciaInicio = parseDate(
+    horarioFijo.fecha_inicio || horarioFijo.fecha_inicio_vigencia || new Date().toISOString()
+  )
 
   // Empezar desde la fecha mayor (desde o vigencia)
   let fechaActual = desde.isAfter(vigenciaInicio) ? desde : vigenciaInicio
 
-  const diasSemana: number[] = []
-  if (horarioFijo.dia_semana_1) {
-    diasSemana.push(DIA_A_NUMERO[horarioFijo.dia_semana_1])
-  }
-  if (horarioFijo.dia_semana_2) {
-    diasSemana.push(DIA_A_NUMERO[horarioFijo.dia_semana_2])
-  }
-  if (horarioFijo.dia_semana_3) {
-    diasSemana.push(DIA_A_NUMERO[horarioFijo.dia_semana_3])
+  const diasRaw = Array.isArray(horarioFijo.dias_semana) && horarioFijo.dias_semana.length > 0
+    ? horarioFijo.dias_semana
+    : [horarioFijo.dia_semana_1, horarioFijo.dia_semana_2, horarioFijo.dia_semana_3].filter(Boolean)
+  const diasSemana: number[] = diasRaw
+    .filter((dia): dia is string => typeof dia === 'string')
+    .map((dia) => DIA_A_NUMERO[dia])
+    .filter((d): d is number => d !== undefined)
+
+  const getDuracionMinutos = () => {
+    if (typeof horarioFijo.duracion_minutos === 'number') return horarioFijo.duracion_minutos
+    if (horarioFijo.hora_inicio && horarioFijo.hora_fin) {
+      const [hIni, mIni] = horarioFijo.hora_inicio.split(':').map(Number)
+      const [hFin, mFin] = horarioFijo.hora_fin.split(':').map(Number)
+      return Math.max(0, hFin * 60 + mFin - (hIni * 60 + mIni))
+    }
+    return 0
   }
 
   // Buscar la próxima ocurrencia en los próximos 14 días
@@ -175,7 +195,7 @@ export function proximaOcurrenciaHorarioFijo(
         horarioFijoId: horarioFijo.id,
         fecha: fechaActual.toDate(),
         horaInicio: horarioFijo.hora_inicio,
-        duracionMinutos: horarioFijo.duracion_minutos,
+        duracionMinutos: getDuracionMinutos(),
       }
     }
 

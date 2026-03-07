@@ -5,6 +5,14 @@ import { createClient } from '../supabase/server'
 import { getUser } from './auth.actions'
 import type { HorarioFijoInput, BajaHorarioFijoInput } from '../validations/horario-fijo.schema'
 
+function sumarMinutosAHora(horaInicio: string, duracionMinutos: number) {
+  const [h, m] = horaInicio.split(':').map(Number)
+  const base = h * 60 + m + duracionMinutos
+  const hh = Math.floor(base / 60) % 24
+  const mm = base % 60
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`
+}
+
 export async function crearHorarioFijo(data: HorarioFijoInput) {
   const supabase = await createClient()
   const usuario = await getUser()
@@ -16,15 +24,26 @@ export async function crearHorarioFijo(data: HorarioFijoInput) {
   // Verificar disponibilidad del profesor en los días seleccionados
   // TODO: Implementar validación de conflictos con otros horarios fijos y reservas
 
-  // Crear horario fijo
+  const diasSemana = [data.dia_semana_1, data.dia_semana_2, data.dia_semana_3].filter(Boolean)
+
+  const horaFin = sumarMinutosAHora(data.hora_inicio, data.duracion_minutos)
+
+  // Crear horario fijo (normalizado al esquema actual de DB)
   const { data: horarioFijo, error } = await supabase
     .from('horarios_fijos')
     .insert({
-      ...data,
-      fecha_inicio_vigencia:
+      sede_id: data.sede_id,
+      profesor_id: data.profesor_id,
+      alumno_id: data.alumno_id,
+      frecuencia: data.frecuencia,
+      dias_semana: diasSemana,
+      hora_inicio: data.hora_inicio,
+      hora_fin: horaFin,
+      fecha_inicio:
         typeof data.fecha_inicio_vigencia === 'string'
           ? data.fecha_inicio_vigencia
-          : data.fecha_inicio_vigencia.toISOString(),
+          : data.fecha_inicio_vigencia.toISOString().slice(0, 10),
+      activo: data.activo,
     })
     .select(`
       *,
@@ -151,7 +170,7 @@ export async function obtenerHorariosFijosAlumno(alumnoId: string) {
     `)
     .eq('alumno_id', alumnoId)
     .eq('activo', true)
-    .order('dia_semana_1', { ascending: true })
+    .order('hora_inicio', { ascending: true })
 
   if (error) return { error: error.message }
   return { data }

@@ -66,17 +66,21 @@ export function HorariosFijosList({
   }
 
   const getDiasSemana = (horario: any) => {
-    const dias = []
-    if (horario.dia_semana_1) {
-      dias.push(DIA_SEMANA_LABELS[horario.dia_semana_1 as keyof typeof DIA_SEMANA_LABELS])
-    }
-    if (horario.dia_semana_2) {
-      dias.push(DIA_SEMANA_LABELS[horario.dia_semana_2 as keyof typeof DIA_SEMANA_LABELS])
-    }
-    if (horario.dia_semana_3) {
-      dias.push(DIA_SEMANA_LABELS[horario.dia_semana_3 as keyof typeof DIA_SEMANA_LABELS])
-    }
+    const dias = Array.isArray(horario.dias_semana)
+      ? horario.dias_semana
+          .map((dia: string) => DIA_SEMANA_LABELS[dia as keyof typeof DIA_SEMANA_LABELS] || dia)
+          .filter(Boolean)
+      : []
     return dias.join(', ')
+  }
+
+  const getDuracionMinutos = (horario: any) => {
+    if (!horario?.hora_inicio || !horario?.hora_fin) return null
+    const [hIni, mIni] = String(horario.hora_inicio).split(':').map(Number)
+    const [hFin, mFin] = String(horario.hora_fin).split(':').map(Number)
+    const inicio = hIni * 60 + mIni
+    const fin = hFin * 60 + mFin
+    return Math.max(0, fin - inicio)
   }
 
   return (
@@ -141,9 +145,11 @@ export function HorariosFijosList({
                   <div className="flex items-center gap-2 text-sm">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <span>{horario.hora_inicio}</span>
-                    <span className="text-muted-foreground">
-                      ({horario.duracion_minutos} min)
-                    </span>
+                    {getDuracionMinutos(horario) ? (
+                      <span className="text-muted-foreground">
+                        ({getDuracionMinutos(horario)} min)
+                      </span>
+                    ) : null}
                   </div>
 
                   {/* Profesor */}
@@ -170,7 +176,7 @@ export function HorariosFijosList({
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Repeat className="h-4 w-4" />
                     <span>
-                      Desde {formatDate(new Date(horario.fecha_inicio_vigencia))}
+                      Desde {formatDate(new Date(horario.fecha_inicio))}
                     </span>
                   </div>
 

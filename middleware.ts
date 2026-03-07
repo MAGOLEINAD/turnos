@@ -8,8 +8,14 @@
  */
 
 import { createServerClient } from '@supabase/ssr'
-import type { CookieMethodsServer } from '@supabase/ssr'
+import type { CookieMethodsServer, SetAllCookies } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+
+type CookiesToSet = Parameters<SetAllCookies>[0]
+
+const createServerClientSafe: (
+  ...args: Parameters<typeof createServerClient>
+) => ReturnType<typeof createServerClient> = createServerClient
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -20,20 +26,18 @@ export async function middleware(request: NextRequest) {
     getAll() {
       return request.cookies.getAll()
     },
-    setAll(cookiesToSet) {
-      cookiesToSet.forEach(({ name, value }) =>
-        request.cookies.set(name, value)
-      )
+    setAll(cookiesToSet: CookiesToSet) {
+      cookiesToSet.forEach((cookie) => request.cookies.set(cookie.name, cookie.value))
       supabaseResponse = NextResponse.next({
         request,
       })
-      cookiesToSet.forEach(({ name, value, options }) =>
-        supabaseResponse.cookies.set(name, value, options)
-      )
+      cookiesToSet.forEach((cookie) => {
+        supabaseResponse.cookies.set(cookie.name, cookie.value, cookie.options)
+      })
     },
   }
 
-  const supabase = createServerClient(
+  const supabase = createServerClientSafe(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {

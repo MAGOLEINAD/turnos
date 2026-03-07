@@ -75,12 +75,12 @@ export const NAV_PROFESOR: NavItem[] = [
 // Navegación para Alumno
 export const NAV_ALUMNO: NavItem[] = [
   {
-    title: 'Calendario',
-    href: '/alumno/calendario',
+    title: 'Mi Agenda',
+    href: '/alumno/mis-reservas',
   },
   {
-    title: 'Mis Reservas',
-    href: '/alumno/mis-reservas',
+    title: 'Calendario',
+    href: '/alumno/calendario',
   },
   {
     title: 'Horarios Fijos',

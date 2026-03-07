@@ -3,8 +3,14 @@
  */
 
 import { createServerClient } from '@supabase/ssr'
-import type { CookieMethodsServer } from '@supabase/ssr'
+import type { CookieMethodsServer, SetAllCookies } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+
+type CookiesToSet = Parameters<SetAllCookies>[0]
+
+const createServerClientSafe: (
+  ...args: Parameters<typeof createServerClient>
+) => ReturnType<typeof createServerClient> = createServerClient
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -12,11 +18,11 @@ export async function createClient() {
     getAll() {
       return cookieStore.getAll()
     },
-    setAll(cookiesToSet) {
+    setAll(cookiesToSet: CookiesToSet) {
       try {
-        cookiesToSet.forEach(({ name, value, options }) =>
-          cookieStore.set(name, value, options)
-        )
+        cookiesToSet.forEach((cookie) => {
+          cookieStore.set(cookie.name, cookie.value, cookie.options)
+        })
       } catch (error) {
         // Las cookies solo se pueden setear desde Server Actions o Route Handlers
         console.error('[Supabase] Error al setear cookies:', error)
@@ -24,7 +30,7 @@ export async function createClient() {
     },
   }
 
-  return createServerClient(
+  return createServerClientSafe(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -51,7 +57,7 @@ export function createServiceRoleClient() {
     },
   }
 
-  return createServerClient(
+  return createServerClientSafe(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     {

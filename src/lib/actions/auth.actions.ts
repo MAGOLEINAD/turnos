@@ -473,3 +473,34 @@ export async function seleccionarPerfilActivo(membresiaId: string) {
   revalidatePath('/', 'layout')
   redirect(getDashboardRoute(membresiaSeleccionada.rol))
 }
+
+export async function seleccionarSedeActivaAlumno(sedeId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'No autenticado' }
+  }
+
+  const { data: membresias, error } = await getMembresiasConEstadoOrganizacion(supabase, user.id)
+
+  if (error || !membresias) {
+    return { error: 'No se pudieron validar las sedes del alumno.' }
+  }
+
+  const membresiaAlumno = membresias
+    .filter(isMembresiaHabilitada)
+    .find((m) => m.rol === 'alumno' && m.sede_id === sedeId)
+
+  if (!membresiaAlumno) {
+    return { error: 'No tienes acceso de alumno a esa sede.' }
+  }
+
+  await ensurePerfilPorRol(user.id, membresiaAlumno)
+  await setContextoActivo(user.id, membresiaAlumno.id)
+  revalidatePath('/', 'layout')
+
+  return { success: true }
+}

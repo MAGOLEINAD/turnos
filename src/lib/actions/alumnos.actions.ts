@@ -410,18 +410,40 @@ export async function obtenerUsuariosDisponiblesParaAlumnos(sedeId: string) {
 }
 
 export async function obtenerCreditosAlumno(alumnoId: string, sedeId?: string) {
+  const usuario = await getUser()
+  if (!usuario) return { error: 'No autenticado' }
+
   const actor = await getActorScope()
   if (!actor.scope) return { error: actor.error || 'No autenticado' }
 
-  if (!canManageAlumnos(actor.scope)) {
+  const supabase = createServiceRoleClient()
+
+  const { data: alumnoPerfil, error: alumnoError } = await supabase
+    .from('alumnos')
+    .select('id, usuario_id, sede_id')
+    .eq('id', alumnoId)
+    .single()
+
+  if (alumnoError || !alumnoPerfil) {
+    return { error: 'Alumno no encontrado.' }
+  }
+
+  const esPropioAlumno = alumnoPerfil.usuario_id === usuario.id
+  const puedeGestionar = canManageAlumnos(actor.scope)
+
+  if (!esPropioAlumno && !puedeGestionar) {
     return { error: 'No autorizado para ver creditos.' }
   }
 
-  const supabase = createServiceRoleClient()
-
   if (sedeId) {
-    const sedeCheck = await canAccessSede(supabase, actor.scope, sedeId)
-    if (!sedeCheck.ok) return { error: sedeCheck.error }
+    if (esPropioAlumno) {
+      if (sedeId !== alumnoPerfil.sede_id) {
+        return { error: 'No autorizado para ver creditos de otra sede.' }
+      }
+    } else {
+      const sedeCheck = await canAccessSede(supabase, actor.scope, sedeId)
+      if (!sedeCheck.ok) return { error: sedeCheck.error }
+    }
   }
 
   let query = supabase
@@ -433,6 +455,8 @@ export async function obtenerCreditosAlumno(alumnoId: string, sedeId?: string) {
 
   if (sedeId) {
     query = query.eq('sede_id', sedeId)
+  } else if (esPropioAlumno) {
+    query = query.eq('sede_id', alumnoPerfil.sede_id)
   } else if (!actor.scope.esSuperAdmin) {
     const { data: sedes } = await supabase
       .from('sedes')
