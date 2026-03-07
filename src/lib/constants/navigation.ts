@@ -19,7 +19,7 @@ export const NAV_SUPER_ADMIN: NavItem[] = [
     href: '/dashboard',
   },
   {
-    title: 'Organizaciones',
+    title: 'Clientes',
     href: '/super-admin/organizaciones',
   },
   {
@@ -53,6 +53,10 @@ export const NAV_ADMIN: NavItem[] = [
   {
     title: 'Alumnos',
     href: '/admin/alumnos',
+  },
+  {
+    title: 'Usuarios',
+    href: '/admin/usuarios',
   },
   {
     title: 'Calendario',

@@ -28,5 +28,12 @@ export default async function SedesPage() {
   const sedes = sedesResult.data || []
   const organizaciones = orgsResult.data || []
 
-  return <SedesList sedesIniciales={sedes} organizaciones={organizaciones} />
+  return (
+    <SedesList
+      sedesIniciales={sedes}
+      organizaciones={organizaciones}
+      canSelectOrganizacion={true}
+      showEntrarASede={true}
+    />
+  )
 }

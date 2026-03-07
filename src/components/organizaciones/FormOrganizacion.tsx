@@ -13,39 +13,58 @@ import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { ComboboxAdmin } from '@/components/ui/combobox-admin'
+import { ClientIconPicker } from '@/components/ui/client-icon-picker'
+import { DEFAULT_CLIENT_ICON } from '@/lib/utils/clientes'
 
 interface FormOrganizacionProps {
   open: boolean
   onClose: () => void
   organizacion?: any
+  admins: Array<{
+    id: string
+    nombre: string
+    apellido: string
+    email: string
+  }>
 }
 
-export function FormOrganizacion({ open, onClose, organizacion }: FormOrganizacionProps) {
+export function FormOrganizacion({ open, onClose, organizacion, admins }: FormOrganizacionProps) {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const isEdit = !!organizacion
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<OrganizacionInput>({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<OrganizacionInput>({
     resolver: zodResolver(organizacionSchema),
     defaultValues: organizacion || {
       nombre: '',
       descripcion: '',
-      logo_url: '',
+      icono: DEFAULT_CLIENT_ICON,
+      admin_usuario_id: '',
       activa: true,
     },
   })
 
+  const adminUsuarioId = watch('admin_usuario_id')
+
   useEffect(() => {
     if (!open) return
 
-    reset(
-      organizacion || {
-        nombre: '',
-        descripcion: '',
-        logo_url: '',
-        activa: true,
-      }
-    )
+    const defaults = organizacion
+      ? {
+          ...organizacion,
+          icono: organizacion.icono || DEFAULT_CLIENT_ICON,
+          admin_usuario_id: organizacion.admin_usuario_id || '',
+        }
+      : {
+          nombre: '',
+          descripcion: '',
+          icono: DEFAULT_CLIENT_ICON,
+          admin_usuario_id: '',
+          activa: true,
+        }
+
+    reset(defaults)
   }, [open, organizacion, reset])
 
   const onSubmit = async (data: OrganizacionInput) => {
@@ -58,12 +77,12 @@ export function FormOrganizacion({ open, onClose, organizacion }: FormOrganizaci
       if (result.error) {
         toast.error(result.error)
       } else {
-        toast.success(isEdit ? 'Organización actualizada' : 'Organización creada')
+        toast.success(isEdit ? 'Cliente actualizado' : 'Cliente creado')
         router.refresh()
         onClose()
       }
     } catch (error) {
-      toast.error('Error al guardar organización')
+      toast.error('Error al guardar cliente')
     } finally {
       setLoading(false)
     }
@@ -73,29 +92,50 @@ export function FormOrganizacion({ open, onClose, organizacion }: FormOrganizaci
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Editar' : 'Nueva'} Organización</DialogTitle>
+          <DialogTitle>{isEdit ? 'Editar' : 'Nuevo'} Cliente</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? 'Actualiza los datos de la organización.'
-              : 'Completa los campos para crear una nueva organización.'}
+              ? 'Actualiza los datos del cliente/empresa.'
+              : 'Completa los campos para crear un nuevo cliente/empresa.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <Label htmlFor="nombre">Nombre *</Label>
+            <Label htmlFor="nombre">Cliente / Empresa *</Label>
             <Input id="nombre" {...register('nombre')} disabled={loading} />
-            {errors.nombre && <p className="text-sm text-destructive mt-1">{errors.nombre.message}</p>}
+            {errors.nombre && <p className="mt-1 text-sm text-destructive">{errors.nombre.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="icono">Icono</Label>
+            <ClientIconPicker
+              value={watch('icono')}
+              onChange={(value) => setValue('icono', value, { shouldValidate: true, shouldDirty: true })}
+              disabled={loading}
+            />
+            <input type="hidden" {...register('icono')} />
+            {errors.icono && <p className="mt-1 text-sm text-destructive">{errors.icono.message}</p>}
           </div>
 
           <div>
-            <Label htmlFor="descripcion">Descripción</Label>
+            <Label htmlFor="descripcion">Descripcion</Label>
             <Textarea id="descripcion" {...register('descripcion')} disabled={loading} rows={3} />
           </div>
 
-          <div>
-            <Label htmlFor="logo_url">URL del Logo</Label>
-            <Input id="logo_url" type="url" {...register('logo_url')} disabled={loading} />
+          <div className="space-y-2">
+            <Label htmlFor="admin_usuario_id">Usuario Admin (opcional)</Label>
+            <ComboboxAdmin
+              admins={admins}
+              value={adminUsuarioId}
+              onValueChange={(value) => setValue('admin_usuario_id', value, { shouldValidate: true })}
+              disabled={loading}
+              placeholder="Sin asociar por ahora"
+            />
+
+            {errors.admin_usuario_id && (
+              <p className="mt-1 text-sm text-destructive">{errors.admin_usuario_id.message}</p>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

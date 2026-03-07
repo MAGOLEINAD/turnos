@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SedeContextSelector } from '@/components/sedes/SedeContextSelector'
+import { formatClientName } from '@/lib/utils/clientes'
 
 interface VistaGlobalPageProps {
   searchParams?: {
@@ -22,12 +23,15 @@ export default async function VistaGlobalPage({ searchParams }: VistaGlobalPageP
   const supabase = await createClient()
   const { data: sedes } = await supabase
     .from('sedes')
-    .select('id, nombre, organizaciones(nombre)')
+    .select('id, nombre, organizaciones(nombre, icono)')
     .order('nombre', { ascending: true })
 
   const sedesList = sedes || []
   const sedeSeleccionada = searchParams?.sede || sedesList[0]?.id || ''
   const sedeActual = sedesList.find((s) => s.id === sedeSeleccionada)
+  const sedeActualOrganizacion = Array.isArray(sedeActual?.organizaciones)
+    ? sedeActual?.organizaciones[0]
+    : sedeActual?.organizaciones
   const sedeQuery = sedeSeleccionada ? `?sede=${sedeSeleccionada}` : ''
 
   return (
@@ -35,7 +39,7 @@ export default async function VistaGlobalPage({ searchParams }: VistaGlobalPageP
       <div>
         <h1 className="text-3xl font-bold">Vista Global</h1>
         <p className="mt-2 text-muted-foreground">
-          Acceso total ordenado por sede para supervisar operación admin, profesor y alumno.
+          Acceso total ordenado por sede para supervisar operacion admin, profesor y alumno.
         </p>
       </div>
 
@@ -43,7 +47,7 @@ export default async function VistaGlobalPage({ searchParams }: VistaGlobalPageP
         <CardHeader>
           <CardTitle>Contexto de Sede</CardTitle>
           <CardDescription>
-            Selecciona la sede que quieres auditar. Esta vista no cambia roles, solo organiza navegación.
+            Selecciona la sede que quieres auditar. Esta vista no cambia roles, solo organiza navegacion.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -51,7 +55,9 @@ export default async function VistaGlobalPage({ searchParams }: VistaGlobalPageP
 
           {sedeActual && (
             <p className="mt-3 text-sm text-muted-foreground">
-              Organización: {sedeActual.organizaciones?.nombre || 'Sin organización'}
+              Cliente: {sedeActualOrganizacion?.nombre
+                ? formatClientName(sedeActualOrganizacion.nombre, sedeActualOrganizacion.icono)
+                : 'Sin cliente'}
             </p>
           )}
         </CardContent>
@@ -61,7 +67,7 @@ export default async function VistaGlobalPage({ searchParams }: VistaGlobalPageP
         <Card>
           <CardHeader>
             <CardTitle>Admin</CardTitle>
-            <CardDescription>Gestión de sede y recursos.</CardDescription>
+            <CardDescription>Gestion de sede y recursos.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <Button asChild variant="outline" className="w-full justify-start">
@@ -74,7 +80,7 @@ export default async function VistaGlobalPage({ searchParams }: VistaGlobalPageP
               <Link href="/admin/alumnos">Alumnos</Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-start">
-              <Link href="/admin/configuracion">Configuración</Link>
+              <Link href="/admin/configuracion">Configuracion</Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-start">
               <Link href={`/admin/calendario${sedeQuery}`}>Calendario</Link>
@@ -122,7 +128,7 @@ export default async function VistaGlobalPage({ searchParams }: VistaGlobalPageP
               <Link href="/alumno/horarios-fijos">Horarios Fijos</Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-start">
-              <Link href="/alumno/creditos">Créditos</Link>
+              <Link href="/alumno/creditos">Creditos</Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-start">
               <Link href="/alumno/pagos">Pagos</Link>

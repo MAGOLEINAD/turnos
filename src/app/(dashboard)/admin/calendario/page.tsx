@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/actions/auth.actions'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -18,7 +18,7 @@ export default async function AdminCalendarioPage({ searchParams }: AdminCalenda
     redirect('/login')
   }
 
-  const supabase = await createClient()
+  const supabase = createServiceRoleClient()
   const esSuperAdmin = usuario.membresias?.some((m: any) => m.rol === 'super_admin' && m.activa)
 
   let sedesDisponibles: Array<{ id: string; nombre: string }> = []
@@ -35,14 +35,29 @@ export default async function AdminCalendarioPage({ searchParams }: AdminCalenda
       sedeSeleccionada = sedesDisponibles[0].id
     }
   } else {
-    const { data: membresia } = await supabase
+    const { data: memberships } = await supabase
       .from('membresias')
-      .select('sede_id, rol')
+      .select('organizacion_id')
       .eq('usuario_id', usuario.id)
       .eq('rol', 'admin')
-      .single()
+      .eq('activa', true)
 
-    if (!membresia?.sede_id) {
+    const orgIdsSet = new Set<string>(
+      (memberships || []).map((m: any) => m.organizacion_id).filter(Boolean)
+    )
+
+    const { data: orgsComoAdminUsuario } = await supabase
+      .from('organizaciones')
+      .select('id')
+      .eq('admin_usuario_id', usuario.id)
+
+    for (const org of orgsComoAdminUsuario || []) {
+      if (org.id) orgIdsSet.add(org.id)
+    }
+
+    const orgIds = Array.from(orgIdsSet)
+
+    if (orgIds.length === 0) {
       return (
         <div className="py-12 text-center">
           <p className="text-muted-foreground">No tienes permisos de admin para una sede.</p>
@@ -50,15 +65,16 @@ export default async function AdminCalendarioPage({ searchParams }: AdminCalenda
       )
     }
 
-    sedeSeleccionada = membresia.sede_id
-    const { data: sede } = await supabase
+    const { data: sedes } = await supabase
       .from('sedes')
       .select('id, nombre')
-      .eq('id', membresia.sede_id)
-      .single()
+      .in('organizacion_id', orgIds)
+      .eq('activa', true)
+      .order('nombre', { ascending: true })
 
-    if (sede) {
-      sedesDisponibles = [sede]
+    sedesDisponibles = sedes || []
+    if (!sedeSeleccionada && sedesDisponibles.length > 0) {
+      sedeSeleccionada = sedesDisponibles[0].id
     }
   }
 

@@ -31,7 +31,9 @@ export interface Database {
           id: string
           nombre: string
           descripcion: string | null
+          icono: string | null
           logo_url: string | null
+          admin_usuario_id: string | null
           activa: boolean
           created_at: string
           updated_at: string
@@ -40,7 +42,9 @@ export interface Database {
           id?: string
           nombre: string
           descripcion?: string | null
+          icono?: string | null
           logo_url?: string | null
+          admin_usuario_id?: string | null
           activa?: boolean
           created_at?: string
           updated_at?: string
@@ -49,7 +53,9 @@ export interface Database {
           id?: string
           nombre?: string
           descripcion?: string | null
+          icono?: string | null
           logo_url?: string | null
+          admin_usuario_id?: string | null
           activa?: boolean
           created_at?: string
           updated_at?: string

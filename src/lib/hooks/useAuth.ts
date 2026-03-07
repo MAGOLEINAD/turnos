@@ -46,6 +46,11 @@ export function useAuth() {
             .single()
 
           if (userData) {
+            if (userData.activo === false) {
+              setUser(null)
+              return
+            }
+
             setUser({
               ...user,
               nombre: userData.nombre,

@@ -4,7 +4,7 @@
 
 'use client'
 
-import { LogOut } from 'lucide-react'
+import { LogOut, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -19,14 +19,26 @@ import { ROLES_LABELS } from '@/lib/constants/roles'
 
 interface NavbarProps {
   usuario: any
+  onMenuClick?: () => void
 }
 
-export function Navbar({ usuario }: NavbarProps) {
+export function Navbar({ usuario, onMenuClick }: NavbarProps) {
   const rol = usuario?.membresias?.[0]?.rol
 
   return (
-    <header className="h-16 border-b border-gray-200 bg-white flex items-center justify-between px-6">
-      <div>
+    <header className="h-16 border-b border-gray-200 bg-white flex items-center justify-between px-4 md:px-6">
+      <div className="flex items-center gap-3">
+        {onMenuClick && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onMenuClick}
+            className="md:hidden"
+            aria-label="Abrir menú"
+          >
+            <Menu className="h-6 w-6" />
+          </Button>
+        )}
         <h2 className="text-lg font-semibold">Dashboard</h2>
       </div>
 
@@ -34,11 +46,11 @@ export function Navbar({ usuario }: NavbarProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
                 {usuario?.nombre?.[0]}
                 {usuario?.apellido?.[0]}
               </div>
-              <div className="text-left">
+              <div className="text-left hidden sm:block">
                 <div className="text-sm font-medium">
                   {usuario?.nombre} {usuario?.apellido}
                 </div>

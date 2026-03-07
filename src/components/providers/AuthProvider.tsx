@@ -57,6 +57,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .single()
 
           if (userData) {
+            if (userData.activo === false) {
+              setUser(null)
+              setLoading(false)
+              return
+            }
+
             setUser({
               ...user,
               nombre: userData.nombre,
